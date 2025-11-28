@@ -30,7 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $_SESSION['user_email'] = $email;
                     $_SESSION['is_admin']   = (int)$user['isAdmin'];
 
-                    header('Location: temp.php');
+                    header('Location: statusReport.php');
                     exit;
                 }
             }
@@ -68,7 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['user_email'] = $email;
                 $_SESSION['is_admin']   = $isAdmin;
 
-                header('Location: temp.php');
+                header('Location: statusReport.php');
                 exit;
             }
         } else {
@@ -102,7 +102,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <!-- Your custom styles -->
     <link rel="stylesheet" href="cs451.css">
 </head>
-<body>
+<body class="auth-body">
     <div class="auth-card">
         <div class="d-flex align-items-center mb-3">
             <div class="me-3">
@@ -164,7 +164,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </form>
     </div>
 
-    <!-- Bootstrap JS (optional) -->
+    <!-- Bootstrap JS (for accordion etc.) -->
     <script
         src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
         integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"

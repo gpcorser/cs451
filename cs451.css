@@ -1,9 +1,17 @@
 :root {
     /* peachy gradient */
     --bg-gradient: linear-gradient(135deg, #ff9a8b 0%, #fecf71 100%);
+    --peach-main: #fb923c;
+    --peach-dark: #ea580c;
+    --peach-soft: #fec89a;
+    --gray-deep: #111827;
+    --gray-soft: #6b7280;
+    --card-bg: rgba(255, 255, 255, 0.97);
 }
 
-body {
+/* ---------- LOGIN PAGE LAYOUT ---------- */
+
+.auth-body {
     margin: 0;
     min-height: 100vh;
     display: flex;
@@ -11,7 +19,7 @@ body {
     justify-content: center;
     background: var(--bg-gradient);
     font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    color: #111827;
+    color: var(--gray-deep);
     animation: fadeInBody 0.7s ease-out;
 }
 
@@ -21,7 +29,7 @@ body {
 }
 
 .auth-card {
-    background: rgba(255, 255, 255, 0.97);
+    background: var(--card-bg);
     border-radius: 1rem;
     box-shadow:
         0 20px 45px rgba(0, 0, 0, 0.32),
@@ -43,14 +51,14 @@ body {
     letter-spacing: 0.04em;
     font-size: 0.85rem;
     text-transform: uppercase;
-    color: #fb923c; /* peach accent */
+    color: var(--peach-main);
 }
 
 .app-title {
     font-weight: 600;
     margin-top: 0.35rem;
     margin-bottom: 0.4rem;
-    color: #111827;
+    color: var(--gray-deep);
 }
 
 .app-subtitle {
@@ -66,24 +74,28 @@ body {
     box-shadow: 0 10px 20px rgba(0, 0, 0, 0.28);
 }
 
+/* ---------- SHARED FORM ELEMENTS ---------- */
+
 .form-label {
     font-size: 0.9rem;
-    color: #111827;
+    color: var(--gray-deep);
 }
 
 .form-control {
     background-color: #f9fafb;
     border-color: #d1d5db;
-    color: #111827;
+    color: var(--gray-deep);
     font-size: 0.95rem;
 }
 
 .form-control:focus {
     background-color: #ffffff;
-    border-color: #fb923c;
-    color: #111827;
+    border-color: var(--peach-main);
+    color: var(--gray-deep);
     box-shadow: 0 0 0 0.15rem rgba(251, 146, 60, 0.45);
 }
+
+/* Buttons */
 
 .btn-modern {
     border-radius: 999px;
@@ -97,10 +109,10 @@ body {
         transform 0.12s ease-out,
         box-shadow 0.12s ease-out,
         background-position 0.25s ease-out;
-    background-image: linear-gradient(135deg, #fb923c 0%, #f97316 50%, #fec89a 100%);
+    background-image: linear-gradient(135deg, var(--peach-main) 0%, #f97316 50%, var(--peach-soft) 100%);
     background-size: 140% 140%;
     border: none;
-    color: #111827;
+    color: var(--gray-deep);
 }
 
 .btn-modern:hover {
@@ -129,8 +141,8 @@ body {
 
 .btn-outline-modern:hover {
     background-color: rgba(254, 243, 199, 0.9);
-    color: #c2410c;
-    border-color: #ea580c;
+    color: var(--peach-dark);
+    border-color: var(--peach-dark);
     transform: translateY(-1px);
 }
 
@@ -149,6 +161,114 @@ body {
 
 .helper-text {
     font-size: 0.8rem;
-    color: #6b7280;
+    color: var(--gray-soft);
     margin-top: 0.4rem;
+}
+
+/* ---------- APP PAGES (STATUS / ASSIGNMENTS / REVIEWS) ---------- */
+
+.app-body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg-gradient);
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: var(--gray-deep);
+}
+
+.app-shell {
+    max-width: 1100px;
+    margin: 2rem auto;
+    padding: 1.75rem 2rem 2.5rem;
+    background: var(--card-bg);
+    border-radius: 1rem;
+    box-shadow:
+        0 18px 40px rgba(0, 0, 0, 0.30),
+        0 0 0 1px rgba(251, 146, 60, 0.25);
+}
+
+.app-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.app-title-main {
+    margin: 0;
+    font-size: 1.6rem;
+    font-weight: 600;
+}
+
+.app-subline {
+    margin: 0.35rem 0 0;
+    font-size: 0.9rem;
+    color: var(--gray-soft);
+}
+
+.app-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: flex-end;
+}
+
+.status-section-title {
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+    font-size: 1.15rem;
+    font-weight: 600;
+}
+
+/* tables */
+
+.status-table {
+    font-size: 0.88rem;
+}
+
+.status-table th {
+    background-color: #fff7ed;
+}
+
+/* ---------- Accordion styling for status report ---------- */
+
+.status-accordion .accordion-item {
+    border: none;
+    margin-bottom: 0.75rem;
+    border-radius: 0.8rem;
+    overflow: hidden;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+}
+
+.status-accordion .accordion-button {
+    background-image: linear-gradient(135deg, #ffedd5 0%, #fed7aa 80%);
+    font-weight: 500;
+    color: var(--gray-deep);
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
+}
+
+.status-accordion .accordion-button.collapsed {
+    background-image: linear-gradient(135deg, #fff7ed 0%, #fffbeb 80%);
+    color: #374151;
+}
+
+.status-accordion .accordion-button::after {
+    filter: hue-rotate(-10deg) brightness(0.8);
+}
+
+.status-accordion .accordion-body {
+    background-color: #fffbf5;
+}
+
+/* small badge-like pill for dates in headers */
+.date-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+    background-color: rgba(251, 146, 60, 0.12);
+    color: #7c2d12;
+    font-size: 0.75rem;
+    margin-left: 0.4rem;
 }
