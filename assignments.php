@@ -2,30 +2,28 @@
 session_start();
 require __DIR__ . '/config.php';
 
-// Require login
 if (!isset($_SESSION['user_id'])) {
     header('Location: login.php');
     exit;
 }
 
 $loggedInUserId = (int)$_SESSION['user_id'];
-$isAdmin = !empty($_SESSION['is_admin']);
-$message = '';
-$editingAssignment = null;
+$userEmail      = $_SESSION['user_email'] ?? 'unknown';
+$isAdmin        = !empty($_SESSION['is_admin']);
+$message        = '';
 
-// ---------- HANDLE ADMIN ACTIONS (CREATE / UPDATE / DELETE) ----------
+// ---------- HANDLE ADMIN POST ACTIONS ----------
 if ($isAdmin && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
     if ($action === 'create' || $action === 'update') {
-        $name          = trim($_POST['name'] ?? '');
-        $description   = trim($_POST['description'] ?? '');
-        $dateAssigned  = trim($_POST['date_assigned'] ?? '');
-        $dateDue       = trim($_POST['date_due'] ?? '');
-        $id            = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+        $name         = trim($_POST['name'] ?? '');
+        $description  = trim($_POST['description'] ?? '');
+        $dateAssigned = $_POST['date_assigned'] ?? '';
+        $dateDue      = $_POST['date_due'] ?? '';
 
         if ($name === '' || $description === '' || $dateAssigned === '' || $dateDue === '') {
-            $message = 'Please fill in all fields.';
+            $message = 'Please fill in all fields for the assignment.';
         } else {
             if ($action === 'create') {
                 $stmt = $pdo->prepare('
@@ -39,36 +37,53 @@ if ($isAdmin && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':date_due'      => $dateDue,
                 ]);
                 $message = 'Assignment created.';
-            } elseif ($action === 'update' && $id > 0) {
-                $stmt = $pdo->prepare('
-                    UPDATE assignments
-                    SET name = :name,
-                        description = :description,
-                        date_assigned = :date_assigned,
-                        date_due = :date_due
-                    WHERE id = :id
-                ');
-                $stmt->execute([
-                    ':name'          => $name,
-                    ':description'   => $description,
-                    ':date_assigned' => $dateAssigned,
-                    ':date_due'      => $dateDue,
-                    ':id'            => $id,
-                ]);
-                $message = 'Assignment updated.';
+            } else { // update
+                $id = (int)($_POST['id'] ?? 0);
+                if ($id > 0) {
+                    $stmt = $pdo->prepare('
+                        UPDATE assignments
+                        SET name = :name,
+                            description = :description,
+                            date_assigned = :date_assigned,
+                            date_due = :date_due
+                        WHERE id = :id
+                    ');
+                    $stmt->execute([
+                        ':name'          => $name,
+                        ':description'   => $description,
+                        ':date_assigned' => $dateAssigned,
+                        ':date_due'      => $dateDue,
+                        ':id'            => $id,
+                    ]);
+                    $message = 'Assignment updated.';
+                } else {
+                    $message = 'Invalid assignment ID.';
+                }
             }
         }
+
     } elseif ($action === 'delete') {
-        $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+        $id = (int)($_POST['id'] ?? 0);
         if ($id > 0) {
             $stmt = $pdo->prepare('DELETE FROM assignments WHERE id = :id');
             $stmt->execute([':id' => $id]);
             $message = 'Assignment deleted.';
+        } else {
+            $message = 'Invalid assignment ID.';
         }
     }
 }
 
-// ---------- LOAD ASSIGNMENT TO EDIT (IF ADMIN + GET ?edit=id) ----------
+// ---------- LOAD ASSIGNMENTS ----------
+$assignmentsStmt = $pdo->query('
+    SELECT id, name, description, date_assigned, date_due
+    FROM assignments
+    ORDER BY date_assigned ASC, id ASC
+');
+$assignments = $assignmentsStmt->fetchAll();
+
+// ---------- LOAD EDITING ASSIGNMENT (IF ANY) ----------
+$editingAssignment = null;
 if ($isAdmin && isset($_GET['edit'])) {
     $editId = (int)$_GET['edit'];
     if ($editId > 0) {
@@ -81,186 +96,281 @@ if ($isAdmin && isset($_GET['edit'])) {
     }
 }
 
-// ---------- FETCH ALL ASSIGNMENTS FOR LIST ----------
-$stmt = $pdo->query('SELECT * FROM assignments ORDER BY date_assigned ASC, id ASC');
-$assignments = $stmt->fetchAll();
+// ---------- REVIEW STATS FOR CURRENT USER ----------
+$givenStatsByAssignment    = [];
+$receivedStatsByAssignment = [];
 
-// ---------- FETCH REVIEW STATS FOR THIS USER (WRITTEN / RECEIVED) ----------
-
-// Reviews WRITTEN by logged-in user, grouped by assignment
-$writtenStats = [];
-$wStmt = $pdo->prepare('
+// Given
+$stmtGiven = $pdo->prepare('
     SELECT assignment_id, COUNT(*) AS cnt, AVG(rating) AS avg_rating
     FROM reviews
     WHERE reviewer_id = :uid
     GROUP BY assignment_id
 ');
-$wStmt->execute([':uid' => $loggedInUserId]);
-foreach ($wStmt->fetchAll() as $row) {
+$stmtGiven->execute([':uid' => $loggedInUserId]);
+foreach ($stmtGiven->fetchAll() as $row) {
     $aid = (int)$row['assignment_id'];
-    $writtenStats[$aid] = [
+    $givenStatsByAssignment[$aid] = [
         'cnt' => (int)$row['cnt'],
         'avg' => $row['avg_rating'] !== null ? (float)$row['avg_rating'] : null,
     ];
 }
 
-// Reviews RECEIVED by logged-in user, grouped by assignment
-$receivedStats = [];
-$rStmt = $pdo->prepare('
+// Received
+$stmtReceived = $pdo->prepare('
     SELECT assignment_id, COUNT(*) AS cnt, AVG(rating) AS avg_rating
     FROM reviews
-    WHERE student_id = :uid
+    WHERE student_id = :sid
     GROUP BY assignment_id
 ');
-$rStmt->execute([':uid' => $loggedInUserId]);
-foreach ($rStmt->fetchAll() as $row) {
+$stmtReceived->execute([':sid' => $loggedInUserId]);
+foreach ($stmtReceived->fetchAll() as $row) {
     $aid = (int)$row['assignment_id'];
-    $receivedStats[$aid] = [
+    $receivedStatsByAssignment[$aid] = [
         'cnt' => (int)$row['cnt'],
         'avg' => $row['avg_rating'] !== null ? (float)$row['avg_rating'] : null,
     ];
 }
+
+// ---------- FORM VALUES ----------
+$formMode  = $editingAssignment ? 'update' : 'create';
+$formTitle = $editingAssignment ? 'Edit Assignment' : 'Add New Assignment';
+
+$valId           = $editingAssignment['id']            ?? 0;
+$valName         = $editingAssignment['name']          ?? '';
+$valDescription  = $editingAssignment['description']   ?? '';
+$valDateAssigned = $editingAssignment['date_assigned'] ?? '';
+$valDateDue      = $editingAssignment['date_due']      ?? '';
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Assignments</title>
-    <style> .nowrap { white-space: nowrap; } </style>
+    <title>Assignments - CS-451 Peer Review</title>
 
+    <!-- Bootstrap 5 CSS -->
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet"
+        integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
+        crossorigin="anonymous"
+    >
+
+    <!-- Google Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap"
+        rel="stylesheet"
+    >
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="cs451.css">
 </head>
-<body>
-
-    <p>
-        Logged in as <?php echo htmlspecialchars($_SESSION['user_email']); ?>
-        (id=<?php echo (int)$_SESSION['user_id']; ?>)
-    </p>
-
-    <h1>Assignments</h1>
-
-    <p><a href="temp.php">Back to home</a></p>
-
-    <?php if ($message !== ''): ?>
-        <p style="color: green;"><?php echo htmlspecialchars($message); ?></p>
-    <?php endif; ?>
-
-    <?php if ($isAdmin): ?>
-        <?php
-        // Decide if we are in "create" or "edit" mode
-        $formMode = $editingAssignment ? 'update' : 'create';
-        $formTitle = $editingAssignment ? 'Edit Assignment' : 'Create New Assignment';
-
-        $valName         = $editingAssignment['name']          ?? '';
-        $valDescription  = $editingAssignment['description']   ?? '';
-        $valDateAssigned = $editingAssignment['date_assigned'] ?? '';
-        $valDateDue      = $editingAssignment['date_due']      ?? '';
-        $valId           = $editingAssignment['id']            ?? 0;
-        ?>
-        <h2><?php echo htmlspecialchars($formTitle); ?></h2>
-
-        <form method="post" action="assignments.php<?php echo $editingAssignment ? '?edit=' . (int)$valId : ''; ?>">
-            <input type="hidden" name="action" value="<?php echo htmlspecialchars($formMode); ?>">
-            <input type="hidden" name="id" value="<?php echo (int)$valId; ?>">
-
-            <label>
-                Name:<br>
-                <input type="text" name="name" value="<?php echo htmlspecialchars($valName); ?>" required style="width: 300px;">
-            </label>
-            <br><br>
-
-            <label>
-                Description:<br>
-                <textarea name="description" rows="4" cols="60" required><?php
-                    echo htmlspecialchars($valDescription);
-                ?></textarea>
-            </label>
-            <br><br>
-
-            <label>
-                Date Assigned (YYYY-MM-DD):<br>
-                <input type="date" name="date_assigned" value="<?php echo htmlspecialchars($valDateAssigned); ?>" required>
-            </label>
-            <br><br>
-
-            <label>
-                Date Due (YYYY-MM-DD):<br>
-                <input type="date" name="date_due" value="<?php echo htmlspecialchars($valDateDue); ?>" required>
-            </label>
-            <br><br>
-
-            <button type="submit">
-                <?php echo $editingAssignment ? 'Update Assignment' : 'Create Assignment'; ?>
-            </button>
-
-            <?php if ($editingAssignment): ?>
-                <a href="assignments.php" style="margin-left: 10px;">Cancel Edit</a>
-            <?php endif; ?>
-        </form>
-
-        <hr>
-    <?php endif; ?>
-
-    <h2>Assignment List</h2>
-
-    <?php if (empty($assignments)): ?>
-        <p>No assignments posted yet.</p>
-    <?php else: ?>
-        <table border="1" cellpadding="6" cellspacing="0">
-            <tr>
-                <th>Name</th>
-                <th>Date Assigned</th>
-                <th>Date Due</th>
-                <th>Description</th>
-                <th>Reviews</th>
-                <?php if ($isAdmin): ?>
-                    <th>Actions</th>
-                <?php endif; ?>
-            </tr>
-
-            <?php foreach ($assignments as $a): ?>
-                <?php
-                    $aid = (int)$a['id'];
-
-                    // written stats
-                    $wCnt = $writtenStats[$aid]['cnt'] ?? 0;
-                    $wAvg = $writtenStats[$aid]['avg'] ?? null;
-
-                    // received stats
-                    $rCnt = $receivedStats[$aid]['cnt'] ?? 0;
-                    $rAvg = $receivedStats[$aid]['avg'] ?? null;
-
-                    $wAvgText = ($wCnt > 0 && $wAvg !== null) ? number_format($wAvg, 1) : '-';
-                    $rAvgText = ($rCnt > 0 && $rAvg !== null) ? number_format($rAvg, 1) : '-';
-                ?>
-                <tr>
-                    <td class="nowrap"><?php echo htmlspecialchars($a['name']); ?></td>
-                    <td class="nowrap"><?php echo htmlspecialchars($a['date_assigned']); ?></td>
-                    <td class="nowrap"><?php echo htmlspecialchars($a['date_due']); ?></td>
-                    <td><?php echo nl2br(htmlspecialchars($a['description'])); ?></td>
-
-                    <td>
-                        <a href="reviews.php?assignment_id=<?php echo $aid; ?>">Reviews</a>
-                        <?php
-                            echo 'written:' . $wCnt . '(' . $wAvgText . '), received:' . $rCnt . '(' . $rAvgText . ')';
-                        ?>
-                    </td>
-
+<body class="app-body">
+    <div class="app-shell">
+        <div class="app-header-row">
+            <div>
+                <h1 class="app-title-main">Assignments</h1>
+                <p class="app-subline">
+                    You are logged in as <?php echo htmlspecialchars($userEmail); ?>
+                    (id=<?php echo $loggedInUserId; ?>)
                     <?php if ($isAdmin): ?>
-                        <td>
-                            <a href="assignments.php?edit=<?php echo $aid; ?>">Edit</a>
-
-                            <form action="assignments.php" method="post" style="display:inline;"
-                                  onsubmit="return confirm('Delete this assignment?');">
-                                <input type="hidden" name="action" value="delete">
-                                <input type="hidden" name="id" value="<?php echo $aid; ?>">
-                                <button type="submit">Delete</button>
-                            </form>
-                        </td>
+                        — <strong>Admin</strong>
                     <?php endif; ?>
-                </tr>
-            <?php endforeach; ?>
-        </table>
-    <?php endif; ?>
+                </p>
+            </div>
+            <div class="app-actions">
+                <a href="statusReport.php" class="btn btn-outline-modern btn-sm">Status Report</a>
+                <a href="login.php" class="btn btn-outline-modern btn-sm">Back to Login</a>
+            </div>
+        </div>
 
+        <?php if ($message !== ''): ?>
+            <div class="alert alert-info alert-modern mb-3" role="alert">
+                <?php echo htmlspecialchars($message); ?>
+            </div>
+        <?php endif; ?>
+
+        <?php if ($isAdmin): ?>
+            <!-- Form box with fieldset/legend -->
+            <fieldset class="form-box-peach mb-4">
+                <legend class="form-box-legend">
+                    <?php echo htmlspecialchars($formTitle); ?>
+                </legend>
+
+                <form method="post" action="assignments.php<?php
+                    echo $editingAssignment ? '?edit=' . (int)$valId : '';
+                ?>">
+                    <input type="hidden" name="action" value="<?php echo htmlspecialchars($formMode); ?>">
+                    <input type="hidden" name="id" value="<?php echo (int)$valId; ?>">
+
+                    <div class="row g-2 align-items-start">
+                        <div class="col-md-3">
+                            <label for="name" class="form-label mb-1">Name</label>
+                            <input
+                                type="text"
+                                class="form-control form-control-sm"
+                                id="name"
+                                name="name"
+                                value="<?php echo htmlspecialchars($valName); ?>"
+                                required
+                            >
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="description" class="form-label mb-1">Description</label>
+                            <textarea
+                                class="form-control form-control-sm"
+                                id="description"
+                                name="description"
+                                rows="2"
+                                required
+                            ><?php echo htmlspecialchars($valDescription); ?></textarea>
+                        </div>
+
+                        <div class="col-md-2">
+                            <label for="date_assigned" class="form-label mb-1">Assigned</label>
+                            <input
+                                type="date"
+                                class="form-control form-control-sm"
+                                id="date_assigned"
+                                name="date_assigned"
+                                value="<?php echo htmlspecialchars($valDateAssigned); ?>"
+                                required
+                            >
+                        </div>
+
+                        <div class="col-md-2">
+                            <label for="date_due" class="form-label mb-1">Due</label>
+                            <input
+                                type="date"
+                                class="form-control form-control-sm"
+                                id="date_due"
+                                name="date_due"
+                                value="<?php echo htmlspecialchars($valDateDue); ?>"
+                                required
+                            >
+                        </div>
+
+                        <div class="col-md-1 d-flex align-items-end">
+                            <div class="d-flex flex-column w-100">
+                                <button type="submit" class="btn btn-modern btn-sm mb-1 w-100">
+                                    <?php echo $editingAssignment ? 'Update' : 'Add'; ?>
+                                </button>
+                                <?php if ($editingAssignment): ?>
+                                    <a href="assignments.php" class="btn btn-outline-modern btn-sm w-100">
+                                        Cancel
+                                    </a>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </fieldset>
+        <?php else: ?>
+            <p class="mb-3">
+                Only the instructor can create or edit assignments. You can view the list below and add peer reviews.
+            </p>
+        <?php endif; ?>
+
+        <h2 class="status-section-title">Assignment List</h2>
+
+        <?php if (empty($assignments)): ?>
+            <p>No assignments have been created yet.</p>
+        <?php else: ?>
+            <div class="table-responsive">
+                <table class="table table-sm table-striped align-middle status-table">
+                    <thead>
+                        <tr>
+                            <th>Assignment</th>
+                            <th class="text-nowrap">Assigned</th>
+                            <th class="text-nowrap">Due</th>
+                            <th>Reviews (you)</th>
+                            <th style="width: 210px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($assignments as $a): ?>
+                            <?php
+                                $aid = (int)$a['id'];
+
+                                $gStats = $givenStatsByAssignment[$aid]    ?? ['cnt' => 0, 'avg' => null];
+                                $rStats = $receivedStatsByAssignment[$aid] ?? ['cnt' => 0, 'avg' => null];
+
+                                $gCnt = $gStats['cnt'];
+                                $gAvg = $gStats['avg'];
+                                $rCnt = $rStats['cnt'];
+                                $rAvg = $rStats['avg'];
+
+                                $gAvgText = ($gCnt > 0 && $gAvg !== null) ? number_format($gAvg, 1) : '-';
+                                $rAvgText = ($rCnt > 0 && $rAvg !== null) ? number_format($rAvg, 1) : '-';
+
+                                $reviewsSummary = sprintf(
+                                    'written:%d(%s), received:%d(%s)',
+                                    $gCnt,
+                                    $gAvgText,
+                                    $rCnt,
+                                    $rAvgText
+                                );
+                            ?>
+                            <tr>
+                                <td>
+                                    <strong><?php echo htmlspecialchars($a['name']); ?></strong><br>
+                                    <small class="text-muted">
+                                        <?php echo nl2br(htmlspecialchars($a['description'])); ?>
+                                    </small>
+                                </td>
+                                <td class="text-nowrap"><?php echo htmlspecialchars($a['date_assigned']); ?></td>
+                                <td class="text-nowrap"><?php echo htmlspecialchars($a['date_due']); ?></td>
+                                <td><?php echo htmlspecialchars($reviewsSummary); ?></td>
+                                <td>
+                                    <a
+                                        href="reviews.php?assignment_id=<?php echo $aid; ?>"
+                                        class="btn btn-modern btn-sm mb-1 w-100"
+                                    >
+                                        Open Reviews
+                                    </a>
+
+                                    <?php if ($isAdmin): ?>
+                                        <div class="d-flex gap-1">
+                                            <a
+                                                href="assignments.php?edit=<?php echo $aid; ?>"
+                                                class="btn btn-outline-modern btn-sm flex-fill"
+                                            >
+                                                Edit
+                                            </a>
+                                            <form
+                                                method="post"
+                                                action="assignments.php"
+                                                class="flex-fill"
+                                                onsubmit="return confirm('Delete this assignment?');"
+                                            >
+                                                <input type="hidden" name="action" value="delete">
+                                                <input type="hidden" name="id" value="<?php echo $aid; ?>">
+                                                <button
+                                                    type="submit"
+                                                    class="btn btn-outline-modern btn-sm w-100"
+                                                >
+                                                    Delete
+                                                </button>
+                                            </form>
+                                        </div>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script
+        src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
+        crossorigin="anonymous"
+    ></script>
 </body>
 </html>
