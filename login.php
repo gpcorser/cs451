@@ -6,8 +6,7 @@ $message = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action   = $_POST['action'] ?? '';
-    $email = trim($_POST['email'] ?? '');
-    }
+    $email    = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
 
     if ($email === '' || $password === '') {
@@ -28,9 +27,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 if (hash_equals($stored, $candidate)) {
                     // success: set session and redirect
-                    $_SESSION['user_id']   = $user['id'];
+                    $_SESSION['user_id']    = $user['id'];
                     $_SESSION['user_email'] = $email;
-                    $_SESSION['is_admin']  = (int)$user['isAdmin'];
+                    $_SESSION['is_admin']   = (int)$user['isAdmin'];
 
                     header('Location: temp.php');
                     exit;
@@ -70,9 +69,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $newId = $pdo->lastInsertId();
 
                 // log them in immediately
-                $_SESSION['user_id']   = $newId;
+                $_SESSION['user_id']    = $newId;
                 $_SESSION['user_email'] = $email;
-                $_SESSION['is_admin']  = $isAdmin;
+                $_SESSION['is_admin']   = $isAdmin;
 
                 header('Location: temp.php');
                 exit;

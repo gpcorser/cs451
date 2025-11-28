@@ -120,6 +120,27 @@ if ($isAdmin) {
 <head>
     <meta charset="UTF-8">
     <title>Temporary Page</title>
+    <style>
+        .collapsible-content {
+            display: none; /* default collapsed */
+            margin-top: 0.5em;
+            margin-bottom: 1.5em;
+        }
+        .collapse-toggle {
+            margin: 0.25em 0;
+        }
+    </style>
+    <script>
+        function toggleSection(id) {
+            var el = document.getElementById(id);
+            if (!el) return;
+            if (el.style.display === 'none' || el.style.display === '') {
+                el.style.display = 'block';
+            } else {
+                el.style.display = 'none';
+            }
+        }
+    </script>
 </head>
 <body>
     <h1>Welcome!</h1>
@@ -190,56 +211,69 @@ if ($isAdmin) {
             </table>
 
         <?php else: ?>
-            <!-- ADMIN VIEW: per-assignment, per-student stats (given + received) -->
+            <!-- ADMIN VIEW: per-assignment, per-student stats (given + received), collapsible -->
             <h2>Review Summary by Assignment and Student</h2>
 
             <?php foreach ($assignments as $a): ?>
-                <?php $aid = (int)$a['id']; ?>
+                <?php
+                    $aid        = (int)$a['id'];
+                    $sectionId  = 'assignment_section_' . $aid;
+                ?>
                 <h3>
                     Assignment: <?php echo htmlspecialchars($a['name']); ?>
                     (<?php echo htmlspecialchars($a['date_assigned']); ?> &rarr; <?php echo htmlspecialchars($a['date_due']); ?>)
                 </h3>
 
+                <button type="button"
+                        class="collapse-toggle"
+                        onclick="toggleSection('<?php echo $sectionId; ?>')">
+                    Show/Hide Student Reviews
+                </button>
+
                 <?php if (empty($students)): ?>
                     <p>No students found.</p>
-                <?php else: ?>
-                    <table border="1" cellpadding="6" cellspacing="0">
-                        <tr>
-                            <th>Student</th>
-                            <th>Email</th>
-                            <th>Reviews Given</th>
-                            <th>Avg Given</th>
-                            <th>Reviews Received</th>
-                            <th>Avg Received</th>
-                        </tr>
-                        <?php foreach ($students as $stu): ?>
-                            <?php
-                                $sid = (int)$stu['id'];
-
-                                $gStats = $statsGivenByAssignmentAndStudent[$aid][$sid]    ?? ['cnt' => 0, 'avg' => null];
-                                $rStats = $statsReceivedByAssignmentAndStudent[$aid][$sid] ?? ['cnt' => 0, 'avg' => null];
-
-                                $gCnt = $gStats['cnt'];
-                                $gAvg = $gStats['avg'];
-                                $rCnt = $rStats['cnt'];
-                                $rAvg = $rStats['avg'];
-
-                                $gAvgText = ($gCnt > 0 && $gAvg !== null) ? number_format($gAvg, 1) : '-';
-                                $rAvgText = ($rCnt > 0 && $rAvg !== null) ? number_format($rAvg, 1) : '-';
-
-                                $fullName = $stu['lname'] . ', ' . $stu['fname'];
-                            ?>
-                            <tr>
-                                <td><?php echo htmlspecialchars($fullName); ?></td>
-                                <td><?php echo htmlspecialchars($stu['email']); ?></td>
-                                <td><?php echo $gCnt; ?></td>
-                                <td><?php echo $gAvgText; ?></td>
-                                <td><?php echo $rCnt; ?></td>
-                                <td><?php echo $rAvgText; ?></td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </table>
                 <?php endif; ?>
+
+                <div id="<?php echo $sectionId; ?>" class="collapsible-content">
+                    <?php if (!empty($students)): ?>
+                        <table border="1" cellpadding="6" cellspacing="0">
+                            <tr>
+                                <th>Student</th>
+                                <th>Email</th>
+                                <th>Reviews Given</th>
+                                <th>Avg Given</th>
+                                <th>Reviews Received</th>
+                                <th>Avg Received</th>
+                            </tr>
+                            <?php foreach ($students as $stu): ?>
+                                <?php
+                                    $sid = (int)$stu['id'];
+
+                                    $gStats = $statsGivenByAssignmentAndStudent[$aid][$sid]    ?? ['cnt' => 0, 'avg' => null];
+                                    $rStats = $statsReceivedByAssignmentAndStudent[$aid][$sid] ?? ['cnt' => 0, 'avg' => null];
+
+                                    $gCnt = $gStats['cnt'];
+                                    $gAvg = $gStats['avg'];
+                                    $rCnt = $rStats['cnt'];
+                                    $rAvg = $rStats['avg'];
+
+                                    $gAvgText = ($gCnt > 0 && $gAvg !== null) ? number_format($gAvg, 1) : '-';
+                                    $rAvgText = ($rCnt > 0 && $rAvg !== null) ? number_format($rAvg, 1) : '-';
+
+                                    $fullName = $stu['lname'] . ', ' . $stu['fname'];
+                                ?>
+                                <tr>
+                                    <td><?php echo htmlspecialchars($fullName); ?></td>
+                                    <td><?php echo htmlspecialchars($stu['email']); ?></td>
+                                    <td><?php echo $gCnt; ?></td>
+                                    <td><?php echo $gAvgText; ?></td>
+                                    <td><?php echo $rCnt; ?></td>
+                                    <td><?php echo $rAvgText; ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </table>
+                    <?php endif; ?>
+                </div>
 
                 <br>
             <?php endforeach; ?>
