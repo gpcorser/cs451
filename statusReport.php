@@ -158,6 +158,11 @@ if ($isAdmin) {
                     <a href="assignments.php" class="btn btn-outline-modern btn-sm">Assignments</a>
                 <?php endif; ?>
 
+                <a href="updatePerson.php" class="btn btn-outline-modern">
+                    Update My Info
+                </a>
+
+
                 <a href="login.php" class="btn btn-outline-modern btn-sm">Back to Login</a>
             </div>
 
