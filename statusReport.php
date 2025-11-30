@@ -144,7 +144,7 @@ if ($isAdmin) {
         <div class="app-header-row">
             <div>
                 <h1 class="app-title-main">
-                    Current Status (<?php echo htmlspecialchars(date('Y-m-d')); ?>)
+                    Status Report (<?php echo htmlspecialchars(date('Y-m-d')); ?>)
                 </h1>
                 <p class="app-subline">
                     You are logged in as <?php echo htmlspecialchars($userEmail); ?>
@@ -152,9 +152,13 @@ if ($isAdmin) {
                 </p>
             </div>
             <div class="app-actions">
-                <a href="assignments.php" class="btn btn-outline-modern btn-sm">View Assignments</a>
+                <?php if ($isAdmin): ?>
+                    <a href="assignments.php" class="btn btn-outline-modern btn-sm">Assignments</a>
+                <?php endif; ?>
+
                 <a href="login.php" class="btn btn-outline-modern btn-sm">Back to Login</a>
             </div>
+
         </div>
 
         <?php if (empty($assignments)): ?>
@@ -163,7 +167,7 @@ if ($isAdmin) {
 
             <?php if (!$isAdmin): ?>
                 <!-- NON-ADMIN VIEW: your own summary -->
-                <h2 class="status-section-title">Your Review Statistics by Assignment</h2>
+                <h2 class="status-section-title">Summary by Assignment</h2>
 
                 <div class="table-responsive">
                     <table class="table table-sm table-striped align-middle status-table">
@@ -172,10 +176,11 @@ if ($isAdmin) {
                                 <th>Assignment</th>
                                 <th>Date Assigned</th>
                                 <th>Date Due</th>
-                                <th>Reviews Given</th>
-                                <th>Avg Given</th>
+                                <th>Reviews Written</th>
+                                <th>Avg</th>
                                 <th>Reviews Received</th>
-                                <th>Avg Received</th>
+                                <th>Avg</th>
+                                <th>Reviews</th> <!-- NEW COLUMN -->
                             </tr>
                         </thead>
                         <tbody>
@@ -201,6 +206,14 @@ if ($isAdmin) {
                                 <td><?php echo $gAvgText; ?></td>
                                 <td><?php echo $rCnt; ?></td>
                                 <td><?php echo $rAvgText; ?></td>
+                                <td>
+                                    <a
+                                        href="reviews.php?assignment_id=<?php echo $aid; ?>"
+                                        class="btn btn-outline-modern btn-sm"
+                                    >
+                                        Reviews
+                                    </a>
+                                </td>
                             </tr>
                         <?php endforeach; ?>
                         </tbody>
@@ -209,7 +222,7 @@ if ($isAdmin) {
 
             <?php else: ?>
                 <!-- ADMIN VIEW: all students, collapsible by assignment -->
-                <h2 class="status-section-title">Review Statistics by Assignment (All Students)</h2>
+                <h2 class="status-section-title">Summary by Assignment (All Students)</h2>
 
                 <div class="accordion status-accordion" id="assignmentAccordion">
                     <?php foreach ($assignments as $a): ?>

@@ -231,7 +231,7 @@ require __DIR__ . '/reviews_core.php';
 
         <?php else: ?>
             <h2 class="status-section-title">
-                Reviews You Have Written<?php echo $assignmentFilter > 0 ? ' (filtered)' : ''; ?>
+                Reviews Written<?php echo $assignmentFilter > 0 ? ' (filtered)' : ''; ?>
             </h2>
 
             <p class="helper-text">
@@ -311,7 +311,7 @@ require __DIR__ . '/reviews_core.php';
             <?php endif; ?>
 
             <h2 class="status-section-title">
-                Reviews About You<?php echo $assignmentFilter > 0 ? ' (filtered)' : ''; ?>
+                Reviews Received<?php echo $assignmentFilter > 0 ? ' (filtered)' : ''; ?>
             </h2>
 
             <p class="helper-text">
