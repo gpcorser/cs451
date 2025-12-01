@@ -163,4 +163,29 @@ if ($isAdmin) {
             'avg' => $row['avg_rating'] !== null ? (float)$row['avg_rating'] : null,
         ];
     }
+
+        // Prepare detail queries for nested per-student breakdown
+    $stmtDetailsGiven = $pdo->prepare('
+        SELECT r.id, r.assignment_id, r.reviewer_id, r.student_id,
+               r.rating, r.comments, r.date_last_edited, r.date_finalized,
+               s.fname AS student_fname, s.lname AS student_lname
+        FROM reviews r
+        JOIN persons s ON r.student_id = s.id
+        WHERE r.assignment_id = :aid
+          AND r.reviewer_id   = :sid
+        ORDER BY s.lname, s.fname
+    ');
+
+    $stmtDetailsReceived = $pdo->prepare('
+        SELECT r.id, r.assignment_id, r.reviewer_id, r.student_id,
+               r.rating, r.comments, r.date_last_edited, r.date_finalized,
+               rv.fname AS reviewer_fname, rv.lname AS reviewer_lname
+        FROM reviews r
+        JOIN persons rv ON r.reviewer_id = rv.id
+        WHERE r.assignment_id = :aid
+          AND r.student_id    = :sid
+        ORDER BY rv.lname, rv.fname
+    ');
 }
+
+

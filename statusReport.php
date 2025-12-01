@@ -169,44 +169,141 @@ require __DIR__ . '/status_common.php';
                                     <?php else: ?>
                                         <div class="table-responsive">
                                             <table class="table table-sm table-striped align-middle status-table">
-                                                <thead>
-                                                    <tr>
-                                                        <th>Student</th>
-                                                        <th>Email</th>
-                                                        <th>Reviews Given</th>
-                                                        <th>Avg Given</th>
-                                                        <th>Reviews Received</th>
-                                                        <th>Avg Received</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    <?php foreach ($students as $stu): ?>
-                                                        <?php
-                                                            $sid = (int)$stu['id'];
+<thead>
+    <tr>
+        <th>Student</th>
+        <th>Email</th>
+        <th>Reviews Given</th>
+        <th>Avg Given</th>
+        <th>Reviews Received</th>
+        <th>Avg Received</th>
+        <th>Details</th>
+    </tr>
+</thead>
+<tbody>
+    <?php foreach ($students as $stu): ?>
+        <?php
+            $sid = (int)$stu['id'];
 
-                                                            $gStats = $statsGivenByAssignmentAndStudent[$aid][$sid]    ?? ['cnt' => 0, 'avg' => null];
-                                                            $rStats = $statsReceivedByAssignmentAndStudent[$aid][$sid] ?? ['cnt' => 0, 'avg' => null];
+            $gStats = $statsGivenByAssignmentAndStudent[$aid][$sid]    ?? ['cnt' => 0, 'avg' => null];
+            $rStats = $statsReceivedByAssignmentAndStudent[$aid][$sid] ?? ['cnt' => 0, 'avg' => null];
 
-                                                            $gCnt = $gStats['cnt'];
-                                                            $gAvg = $gStats['avg'];
-                                                            $rCnt = $rStats['cnt'];
-                                                            $rAvg = $rStats['avg'];
+            $gCnt = $gStats['cnt'];
+            $gAvg = $gStats['avg'];
+            $rCnt = $rStats['cnt'];
+            $rAvg = $rStats['avg'];
 
-                                                            $gAvgText = ($gCnt > 0 && $gAvg !== null) ? number_format($gAvg, 1) : '-';
-                                                            $rAvgText = ($rCnt > 0 && $rAvg !== null) ? number_format($rAvg, 1) : '-';
+            $gAvgText = ($gCnt > 0 && $gAvg !== null) ? number_format($gAvg, 1) : '-';
+            $rAvgText = ($rCnt > 0 && $rAvg !== null) ? number_format($rAvg, 1) : '-';
 
-                                                            $fullName = $stu['lname'] . ', ' . $stu['fname'];
-                                                        ?>
-                                                        <tr>
-                                                            <td><?php echo htmlspecialchars($fullName); ?></td>
-                                                            <td><?php echo htmlspecialchars($stu['email']); ?></td>
-                                                            <td><?php echo $gCnt; ?></td>
-                                                            <td><?php echo $gAvgText; ?></td>
-                                                            <td><?php echo $rCnt; ?></td>
-                                                            <td><?php echo $rAvgText; ?></td>
-                                                        </tr>
-                                                    <?php endforeach; ?>
-                                                </tbody>
+            $fullName = $stu['lname'] . ', ' . $stu['fname'];
+
+            // unique collapse ID per assignment + student
+            $collapseIdStudent = 'details-' . $aid . '-' . $sid;
+
+            // Fetch detailed reviews GIVEN and RECEIVED for this (assignment, student)
+            $detailsGiven = [];
+            $detailsReceived = [];
+
+            if (isset($stmtDetailsGiven, $stmtDetailsReceived)) {
+                $stmtDetailsGiven->execute([':aid' => $aid, ':sid' => $sid]);
+                $detailsGiven = $stmtDetailsGiven->fetchAll(PDO::FETCH_ASSOC);
+
+                $stmtDetailsReceived->execute([':aid' => $aid, ':sid' => $sid]);
+                $detailsReceived = $stmtDetailsReceived->fetchAll(PDO::FETCH_ASSOC);
+            }
+        ?>
+        <!-- Summary row -->
+        <tr>
+            <td><?php echo htmlspecialchars($fullName); ?></td>
+            <td><?php echo htmlspecialchars($stu['email']); ?></td>
+            <td><?php echo $gCnt; ?></td>
+            <td><?php echo $gAvgText; ?></td>
+            <td><?php echo $rCnt; ?></td>
+            <td><?php echo $rAvgText; ?></td>
+            <td>
+                <button
+                    type="button"
+                    class="btn btn-outline-modern btn-sm"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#<?php echo $collapseIdStudent; ?>"
+                    aria-expanded="false"
+                    aria-controls="<?php echo $collapseIdStudent; ?>"
+                >
+                    Details
+                </button>
+            </td>
+        </tr>
+
+        <!-- Nested detail row -->
+        <tr class="collapse" id="<?php echo $collapseIdStudent; ?>">
+            <td colspan="7">
+                <div class="row">
+                    <div class="col-md-6">
+                        <strong>Reviews Given</strong>
+                        <?php if (empty($detailsGiven)): ?>
+                            <p class="small text-muted mb-1">No reviews given for this assignment.</p>
+                        <?php else: ?>
+                            <table class="table table-sm mb-2">
+                                <thead>
+                                    <tr>
+                                        <th>About</th>
+                                        <th>Rating</th>
+                                        <th>Comments</th>
+                                        <th>Last Edited</th>
+                                        <th>Finalized</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($detailsGiven as $d): ?>
+                                        <tr>
+                                            <td><?php echo htmlspecialchars($d['student_lname'] . ', ' . $d['student_fname']); ?></td>
+                                            <td><?php echo (int)$d['rating']; ?></td>
+                                            <td><?php echo nl2br(htmlspecialchars($d['comments'])); ?></td>
+                                            <td><?php echo htmlspecialchars($d['date_last_edited']); ?></td>
+                                            <td><?php echo htmlspecialchars($d['date_finalized'] ?? ''); ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        <?php endif; ?>
+                    </div>
+
+                    <div class="col-md-6">
+                        <strong>Reviews Received</strong>
+                        <?php if (empty($detailsReceived)): ?>
+                            <p class="small text-muted mb-1">No reviews received for this assignment.</p>
+                        <?php else: ?>
+                            <table class="table table-sm mb-2">
+                                <thead>
+                                    <tr>
+                                        <th>From</th>
+                                        <th>Rating</th>
+                                        <th>Comments</th>
+                                        <th>Last Edited</th>
+                                        <th>Finalized</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($detailsReceived as $d): ?>
+                                        <tr>
+                                            <td><?php echo htmlspecialchars($d['reviewer_lname'] . ', ' . $d['reviewer_fname']); ?></td>
+                                            <td><?php echo (int)$d['rating']; ?></td>
+                                            <td><?php echo nl2br(htmlspecialchars($d['comments'])); ?></td>
+                                            <td><?php echo htmlspecialchars($d['date_last_edited']); ?></td>
+                                            <td><?php echo htmlspecialchars($d['date_finalized'] ?? ''); ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </td>
+        </tr>
+    <?php endforeach; ?>
+</tbody>
+
                                             </table>
                                         </div>
                                     <?php endif; ?>
