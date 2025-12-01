@@ -78,7 +78,7 @@ if (!$isAdmin && $assignmentFilter > 0) {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Peer Reviews - CS-451 Peer Review</title>
+    <title>CS-451: Peer Grading App</title>
     <link rel="shortcut icon" href="https://mypages.svsu.edu/~gpcorser/cs451/cs451_icon_dalle.png" type="image/png">
     <link rel="icon" href="https://mypages.svsu.edu/~gpcorser/cs451/cs451_icon_dalle.png" type="image/png">
 
@@ -105,20 +105,18 @@ if (!$isAdmin && $assignmentFilter > 0) {
     <div class="app-shell">
         <div class="app-header-row">
             <div>
-                <h1 class="app-title-main">Peer Reviews</h1>
+                <h1 class="app-title-main">Ratings for Assignment: 
+                    <?php if ($assignmentFilter > 0): ?>
+                        <strong><?php echo htmlspecialchars($assignmentFilterName); ?></strong>
+                        (id=<?php echo (int)$assignmentFilter; ?>)
+                    <?php endif; ?>
+                </h1>
                 <p class="app-subline">
                     You are logged in as <?php echo htmlspecialchars($userEmail); ?>
                     (id=<?php echo $loggedInUserId; ?>)
                     <?php if ($isAdmin): ?>
                         — <strong>Admin</strong>
                     <?php endif; ?>
-<?php if ($assignmentFilter > 0): ?>
-    <br>
-    Filtering by assignment:
-    <strong><?php echo htmlspecialchars($assignmentFilterName); ?></strong>
-    (id=<?php echo (int)$assignmentFilter; ?>)
-<?php endif; ?>
-
                 </p>
             </div>
             <div class="app-actions">
