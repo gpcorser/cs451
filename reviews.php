@@ -211,7 +211,7 @@ if (!$isAdmin && $assignmentFilter > 0) {
 
                     <div class="col-md-2 d-flex align-items-end">
                         <button type="submit" class="btn btn-modern btn-sm w-100">
-                            <?php echo $editingReview ? 'Update Review' : 'Create Review'; ?>
+                            <?php echo $editingReview ? 'Update Review' : 'Submit'; ?>
                         </button>
                     </div>
                 </div>
