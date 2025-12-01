@@ -105,7 +105,7 @@ if (!$isAdmin && $assignmentFilter > 0) {
     <div class="app-shell">
         <div class="app-header-row">
             <div>
-                <h1 class="app-title-main">Ratings for Assignment: 
+                <h1 class="app-title-main">Ratings for: 
                     <?php if ($assignmentFilter > 0): ?>
                         <strong><?php echo htmlspecialchars($assignmentFilterName); ?></strong>
                         (id=<?php echo (int)$assignmentFilter; ?>)
@@ -120,7 +120,9 @@ if (!$isAdmin && $assignmentFilter > 0) {
                 </p>
             </div>
             <div class="app-actions">
-                <a href="assignments.php" class="btn btn-outline-modern btn-sm">Assignments</a>
+                <?php if ($isAdmin): ?>
+                    <a href="assignments.php" class="btn btn-outline-modern btn-sm">Assignments</a>
+                <?php endif; ?>
                 <a href="statusReport.php" class="btn btn-outline-modern btn-sm">Status Report</a>
                 <a href="login.php" class="btn btn-outline-modern btn-sm">Back to Login</a>
             </div>
