@@ -1,4 +1,8 @@
 <?php
+
+date_default_timezone_set('America/Detroit');
+
+
 $host = 'localhost';
 $db   = 'cs451';
 $user = 'teacher'; // not the real username
