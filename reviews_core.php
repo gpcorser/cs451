@@ -27,6 +27,7 @@ function can_edit_review(array $review, int $userId, bool $isAdmin): bool {
     return false;
 }
 
+
 // ---------- LOAD ASSIGNMENTS (FOR DROPDOWN) ----------
 $assignments = $pdo->query('
     SELECT id, name

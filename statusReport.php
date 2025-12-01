@@ -11,6 +11,58 @@ $loggedInUserId = (int)$_SESSION['user_id'];
 $userEmail      = $_SESSION['user_email'] ?? 'unknown';
 $isAdmin        = !empty($_SESSION['is_admin']);
 
+// -------------------------- FUNCTION -------------------------
+
+/**
+ * Return a label like:
+ *   "Team 1: Max Yaw, John Smith, Joe Blough"
+ * for the team that $personId is on for $assignmentId.
+ * Returns null if no team is found.
+ */
+function get_team_label_for_assignment(PDO $pdo, int $assignmentId, int $personId): ?string
+{
+    static $cache = [];
+
+    $key = $assignmentId . ':' . $personId;
+    if (isset($cache[$key])) {
+        return $cache[$key];
+    }
+
+    $sql = '
+        SELECT ta.team_number,
+               GROUP_CONCAT(
+                   CONCAT(p.fname, " ", p.lname)
+                   ORDER BY p.lname, p.fname
+                   SEPARATOR ", "
+               ) AS members
+        FROM teamassignments ta
+        JOIN teamassignments ta2
+          ON ta2.assignment_id = ta.assignment_id
+         AND ta2.team_number   = ta.team_number
+        JOIN persons p
+          ON p.id = ta2.person_id
+        WHERE ta.assignment_id = :aid
+          AND ta.person_id     = :pid
+        GROUP BY ta.team_number
+        LIMIT 1
+    ';
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([
+        ':aid' => $assignmentId,
+        ':pid' => $personId,
+    ]);
+
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row) {
+        return $cache[$key] = null;
+    }
+
+    $label = 'Team ' . $row['team_number'] . ': ' . $row['members'];
+    return $cache[$key] = $label;
+}
+
+
 // ---------- LOAD ALL ASSIGNMENTS ----------
 $assignmentsStmt = $pdo->query('
     SELECT id, name, date_assigned, date_due
@@ -162,7 +214,6 @@ if ($isAdmin) {
                     Update My Info
                 </a>
 
-
                 <a href="login.php" class="btn btn-outline-modern btn-sm">Back to Login</a>
             </div>
 
@@ -187,13 +238,13 @@ if ($isAdmin) {
                                 <th>Avg</th>
                                 <th>Reviews Received</th>
                                 <th>Avg</th>
-                                <th>Reviews</th> <!-- NEW COLUMN -->
+                                <th>Reviews</th>
                             </tr>
                         </thead>
                         <tbody>
                         <?php foreach ($assignments as $a): ?>
                             <?php
-                                $aid   = (int)$a['id'];
+                                $aid    = (int)$a['id'];
                                 $gStats = $givenStatsByAssignment[$aid]    ?? ['cnt' => 0, 'avg' => null];
                                 $rStats = $receivedStatsByAssignment[$aid] ?? ['cnt' => 0, 'avg' => null];
 
@@ -204,7 +255,11 @@ if ($isAdmin) {
 
                                 $gAvgText = ($gCnt > 0 && $gAvg !== null) ? number_format($gAvg, 1) : '-';
                                 $rAvgText = ($rCnt > 0 && $rAvg !== null) ? number_format($rAvg, 1) : '-';
+
+                                // NEW: compute team label for this assignment and logged-in user
+                                $teamLabel = get_team_label_for_assignment($pdo, $aid, $loggedInUserId);
                             ?>
+                            <!-- normal row (unchanged) -->
                             <tr>
                                 <td><?php echo htmlspecialchars($a['name']); ?></td>
                                 <td><?php echo htmlspecialchars($a['date_assigned']); ?></td>
@@ -222,6 +277,17 @@ if ($isAdmin) {
                                     </a>
                                 </td>
                             </tr>
+
+                            <?php if ($teamLabel): ?>
+                            <!-- extra row: first cell empty, remaining merged -->
+                            <tr>
+                                <td></td>
+                                <td colspan="7" class="small text-muted">
+                                    <?php echo htmlspecialchars($teamLabel); ?>
+                                </td>
+                            </tr>
+                            <?php endif; ?>
+
                         <?php endforeach; ?>
                         </tbody>
                     </table>
@@ -234,8 +300,8 @@ if ($isAdmin) {
                 <div class="accordion status-accordion" id="assignmentAccordion">
                     <?php foreach ($assignments as $a): ?>
                         <?php
-                            $aid       = (int)$a['id'];
-                            $headingId = 'heading' . $aid;
+                            $aid        = (int)$a['id'];
+                            $headingId  = 'heading' . $aid;
                             $collapseId = 'collapse' . $aid;
                         ?>
                         <div class="accordion-item">

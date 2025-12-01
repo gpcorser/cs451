@@ -81,7 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>CS-451: Peer Review App</title>
+    <title>CS-451: Peer Grading App</title>
     <link rel="shortcut icon" href="https://mypages.svsu.edu/~gpcorser/cs451/cs451_icon_dalle.png" type="image/png">
     <link rel="icon" href="https://mypages.svsu.edu/~gpcorser/cs451/cs451_icon_dalle.png" type="image/png">
 
@@ -109,13 +109,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="d-flex align-items-center mb-3">
             <div class="me-3">
                 <!-- Update src if your icon file has a different name -->
-                <img src="cs451-icon.png" alt="CS-451 Peer Review Icon" class="brand-icon">
+                <img src="cs451-icon.png" alt="CS-451 Peer Grading App Icon" class="brand-icon">
             </div>
             <div>
-                <div class="brand-title">CS-451: Peer Review App</div>
+                <div class="brand-title">CS-451: Peer Grading App</div>
                 <h1 class="app-title h4 mb-1">Login</h1>
                 <p class="app-subtitle mb-0">
-                    Write and read peer reviews, ratings and comments.
+                    Ratings and comments by and of fellow students.
                 </p>
             </div>
         </div>
