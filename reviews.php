@@ -2,6 +2,77 @@
 session_start();
 require __DIR__ . '/config.php';
 require __DIR__ . '/reviews_core.php';
+
+# Load assignment name
+
+$assignmentFilterName = '';
+
+if ($assignmentFilter > 0) {
+    $stmtAF = $pdo->prepare('SELECT name FROM assignments WHERE id = :id');
+    $stmtAF->execute([':id' => $assignmentFilter]);
+    $rowAF = $stmtAF->fetch(PDO::FETCH_ASSOC);
+    if ($rowAF) {
+        $assignmentFilterName = $rowAF['name'];
+    }
+}
+
+
+/**
+ * Build the list of people the current user is allowed to review
+ * for the currently filtered assignment.
+ *
+ * - Admins: can see everyone in $persons (unchanged behavior)
+ * - Non-admins with assignmentFilter > 0: only teammates for that assignment
+ * - Fallback: $persons
+ */
+$reviewablePersons = $persons; // default: full list
+
+if (!$isAdmin && $assignmentFilter > 0) {
+    // 1. Find this user's team_number for the current assignment
+    $stmt = $pdo->prepare('
+        SELECT team_number
+        FROM teamassignments
+        WHERE assignment_id = :aid
+          AND person_id    = :pid
+        LIMIT 1
+    ');
+    $stmt->execute([
+        ':aid' => $assignmentFilter,
+        ':pid' => $loggedInUserId,
+    ]);
+    $teamRow = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($teamRow) {
+        $teamNumber = (int)$teamRow['team_number'];
+
+        // 2. Get all persons on that team for this assignment
+        $stmt2 = $pdo->prepare('
+            SELECT p.id, p.fname, p.lname, p.email
+            FROM teamassignments AS ta
+            JOIN persons AS p ON ta.person_id = p.id
+            WHERE ta.assignment_id = :aid
+              AND ta.team_number   = :tn
+            ORDER BY p.lname ASC, p.fname ASC
+        ');
+        $stmt2->execute([
+            ':aid' => $assignmentFilter,
+            ':tn'  => $teamNumber,
+        ]);
+        $rows = $stmt2->fetchAll(PDO::FETCH_ASSOC);
+
+        // 3. Remove the current user from the list (no self-review)
+        $reviewablePersons = [];
+        foreach ($rows as $r) {
+            if ((int)$r['id'] !== $loggedInUserId) {
+                $reviewablePersons[] = $r;
+            }
+        }
+    } else {
+        // No team assignment found for this user in this assignment
+        // -> empty list so they can't review anyone
+        $reviewablePersons = [];
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -41,9 +112,13 @@ require __DIR__ . '/reviews_core.php';
                     <?php if ($isAdmin): ?>
                         — <strong>Admin</strong>
                     <?php endif; ?>
-                    <?php if ($assignmentFilter > 0): ?>
-                        <br>Filtering by assignment ID: <?php echo (int)$assignmentFilter; ?>
-                    <?php endif; ?>
+<?php if ($assignmentFilter > 0): ?>
+    <br>
+    Filtering by assignment:
+    <strong><?php echo htmlspecialchars($assignmentFilterName); ?></strong>
+    (id=<?php echo (int)$assignmentFilter; ?>)
+<?php endif; ?>
+
                 </p>
             </div>
             <div class="app-actions">
@@ -88,7 +163,7 @@ require __DIR__ . '/reviews_core.php';
                         <label class="form-label mb-1" for="student_id">Student being reviewed</label>
                         <select name="student_id" id="student_id" class="form-control form-control-sm" required>
                             <option value="">-- Select student --</option>
-                            <?php foreach ($persons as $p): ?>
+                            <?php foreach ($reviewablePersons as $p): ?>
                                 <?php
                                 $pid = (int)$p['id'];
                                 $fullName = $p['lname'] . ', ' . $p['fname'] . ' (' . $p['email'] . ')';
@@ -99,6 +174,11 @@ require __DIR__ . '/reviews_core.php';
                                 </option>
                             <?php endforeach; ?>
                         </select>
+                        <?php if (!$isAdmin && $assignmentFilter > 0 && empty($reviewablePersons)): ?>
+                            <div class="form-text small text-danger">
+                                You are not currently assigned to a team for this assignment, so no students are available to review.
+                            </div>
+                        <?php endif; ?>
                     </div>
 
                     <div class="col-md-4">
@@ -157,6 +237,9 @@ require __DIR__ . '/reviews_core.php';
                 <?php endif; ?>
             </form>
         </fieldset>
+
+
+
 
         <?php if ($isAdmin): ?>
             <h2 class="status-section-title">
