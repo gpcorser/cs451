@@ -6,13 +6,16 @@ $message = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action   = $_POST['action'] ?? '';
-    $email    = trim($_POST['email'] ?? '');
+    $email = trim($_POST['email'] ?? '');
+    /* allow login even if user forgot "@svsu.edu" */
+    if ($email !== '' && strpos($email, '@') === false) {
+        $email .= '@svsu.edu';
+    }
+
     $password = $_POST['password'] ?? '';
 
     if ($email === '' || $password === '') {
         $message = 'Please enter both email and password.';
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $message = 'Please enter a valid email address.';
     } else {
         if ($action === 'login') {
             // ----- LOGIN FLOW -----
@@ -115,7 +118,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="brand-title">CS-451: Peer Grading App</div>
                 <h1 class="app-title h4 mb-1">Login</h1>
                 <p class="app-subtitle mb-0">
-                    Ratings and comments by and of fellow students.
+                    Ratings and comments of fellow students.
                 </p>
             </div>
         </div>
@@ -130,7 +133,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="mb-3">
                 <label for="email" class="form-label">SVSU Email</label>
                 <input
-                    type="email"
+                    type="text"
                     class="form-control"
                     id="email"
                     name="email"
