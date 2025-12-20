@@ -18,6 +18,12 @@
  *   - $message
  */
 
+require_once __DIR__ . '/upload_helpers.php';
+
+// Upload constraints
+$MAX_UPLOAD_FILES = 3;
+$MAX_UPLOAD_BYTES = 2 * 1024 * 1024; // 2MB per file
+
 /**
  * Generate team assignments for a given assignment using ONLY team sizes of 3 or 4.
  *
@@ -191,6 +197,49 @@ if ($isAdmin && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $newId = (int)$pdo->lastInsertId();
 
+                // Optional: upload assignment instruction PDFs (admin only)
+                try {
+                    if (!empty($_FILES['assignment_pdfs']) && !empty($_FILES['assignment_pdfs']['name'])) {
+                        $files = flatten_files_array($_FILES['assignment_pdfs'] ?? []);
+                        $clean = validate_uploads($files, $MAX_UPLOAD_FILES, $MAX_UPLOAD_BYTES, ['pdf']);
+
+                        $pdo->beginTransaction();
+                        foreach ($clean as $f) {
+                            $idx = next_available_index($pdo, 'assignment_files', ['assignment_id' => $newId], 3);
+                            if ($idx === 0) {
+                                throw new Exception('This assignment already has 3 instruction PDFs. Delete one to upload another.');
+                            }
+                            $stored = random_storage_name($f['ext']);
+                            $dir = __DIR__ . '/uploads/assignments/' . $newId;
+                            ensure_dir($dir);
+                            $dest = $dir . '/' . $stored;
+                            if (!move_uploaded_file($f['tmp_name'], $dest)) {
+                                throw new Exception('Failed to move uploaded PDF.');
+                            }
+                            $ins = $pdo->prepare('
+                                INSERT INTO assignment_files
+                                    (assignment_id, file_index, original_name, stored_name, mime_type, file_size, uploaded_by)
+                                VALUES
+                                    (:aid, :idx, :orig, :stored, :mime, :size, :by)
+                            ');
+                            $ins->execute([
+                                ':aid'    => $newId,
+                                ':idx'    => $idx,
+                                ':orig'   => $f['orig_name'],
+                                ':stored' => $stored,
+                                ':mime'   => $f['mime'],
+                                ':size'   => $f['size'],
+                                ':by'     => $loggedInUserId,
+                            ]);
+                        }
+                        $pdo->commit();
+                    }
+                } catch (Throwable $e) {
+                    if ($pdo->inTransaction()) $pdo->rollBack();
+                    // Keep going (assignment exists); just add note to message
+                    $message .= ' (PDF upload warning: ' . $e->getMessage() . ')';
+                }
+
                 // Always generate teams on create
                 try {
                     $rows = generateTeamsForAssignment($pdo, $newId);
@@ -234,6 +283,49 @@ if ($isAdmin && $_SERVER['REQUEST_METHOD'] === 'POST') {
                         ':id'            => $id,
                     ]);
 
+                    // Optional: upload additional instruction PDFs on update (admin only)
+                    try {
+                        if (!empty($_FILES['assignment_pdfs']) && !empty($_FILES['assignment_pdfs']['name'])) {
+                            $files = flatten_files_array($_FILES['assignment_pdfs'] ?? []);
+                            $clean = validate_uploads($files, $MAX_UPLOAD_FILES, $MAX_UPLOAD_BYTES, ['pdf']);
+
+                            $pdo->beginTransaction();
+                            foreach ($clean as $f) {
+                                $idx = next_available_index($pdo, 'assignment_files', ['assignment_id' => $id], 3);
+                                if ($idx === 0) {
+                                    throw new Exception('This assignment already has 3 instruction PDFs. Delete one to upload another.');
+                                }
+                                $stored = random_storage_name($f['ext']);
+                                $dir = __DIR__ . '/uploads/assignments/' . $id;
+                                ensure_dir($dir);
+                                $dest = $dir . '/' . $stored;
+                                if (!move_uploaded_file($f['tmp_name'], $dest)) {
+                                    throw new Exception('Failed to move uploaded PDF.');
+                                }
+                                $ins = $pdo->prepare('
+                                    INSERT INTO assignment_files
+                                        (assignment_id, file_index, original_name, stored_name, mime_type, file_size, uploaded_by)
+                                    VALUES
+                                        (:aid, :idx, :orig, :stored, :mime, :size, :by)
+                                ');
+                                $ins->execute([
+                                    ':aid'    => $id,
+                                    ':idx'    => $idx,
+                                    ':orig'   => $f['orig_name'],
+                                    ':stored' => $stored,
+                                    ':mime'   => $f['mime'],
+                                    ':size'   => $f['size'],
+                                    ':by'     => $loggedInUserId,
+                                ]);
+                            }
+                            $pdo->commit();
+                            $message .= ' (PDFs uploaded.)';
+                        }
+                    } catch (Throwable $e) {
+                        if ($pdo->inTransaction()) $pdo->rollBack();
+                        $message .= ' (PDF upload warning: ' . $e->getMessage() . ')';
+                    }
+
                     // After update, generate teams ONLY if none exist yet
                     if ($teamCount === 0) {
                         try {
@@ -264,6 +356,128 @@ if ($isAdmin && $_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+// ---------- HANDLE FILE UPLOAD / DELETE (instruction PDFs + student ZIP submissions) ----------
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = $_POST['action'] ?? '';
+
+    // Student submissions (ZIP only): admin OR the student themself for that assignment
+    if ($action === 'upload_submission_files') {
+        $aid      = (int)($_POST['assignment_id'] ?? 0);
+        $personId = (int)($_POST['person_id'] ?? 0);
+
+        try {
+            if ($aid <= 0 || $personId <= 0) throw new Exception('Invalid assignment/person.');
+
+            if (!$isAdmin && $personId !== $loggedInUserId) {
+                throw new Exception('Not authorized to upload for another student.');
+            }
+
+            // Ensure this person is actually assigned to a team for this assignment
+            $check = $pdo->prepare('SELECT COUNT(*) FROM teamassignments WHERE assignment_id=:aid AND person_id=:pid');
+            $check->execute([':aid' => $aid, ':pid' => $personId]);
+            if ((int)$check->fetchColumn() === 0) {
+                throw new Exception('No team assignment record found for this student.');
+            }
+
+            $files = flatten_files_array($_FILES['files'] ?? []);
+            $clean = validate_uploads($files, $MAX_UPLOAD_FILES, $MAX_UPLOAD_BYTES, ['zip']);
+
+            $pdo->beginTransaction();
+
+            foreach ($clean as $f) {
+                $idx = next_available_index($pdo, 'teamassignment_files', ['assignment_id' => $aid, 'person_id' => $personId], 3);
+                if ($idx === 0) {
+                    throw new Exception('You already have 3 uploaded ZIP files for this assignment. Delete one to upload another.');
+                }
+
+                $stored = random_storage_name($f['ext']);
+                $dir = __DIR__ . '/uploads/submissions/' . $aid . '/' . $personId;
+                ensure_dir($dir);
+
+                $dest = $dir . '/' . $stored;
+                if (!move_uploaded_file($f['tmp_name'], $dest)) {
+                    throw new Exception('Failed to move uploaded ZIP.');
+                }
+
+                $ins = $pdo->prepare('
+                    INSERT INTO teamassignment_files
+                        (assignment_id, person_id, file_index, original_name, stored_name, mime_type, file_size, uploaded_by)
+                    VALUES
+                        (:aid, :pid, :idx, :orig, :stored, :mime, :size, :by)
+                ');
+                $ins->execute([
+                    ':aid'    => $aid,
+                    ':pid'    => $personId,
+                    ':idx'    => $idx,
+                    ':orig'   => $f['orig_name'],
+                    ':stored' => $stored,
+                    ':mime'   => $f['mime'],
+                    ':size'   => $f['size'],
+                    ':by'     => $loggedInUserId,
+                ]);
+            }
+
+            $pdo->commit();
+            $message = 'Submission ZIP file(s) uploaded.';
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            $message = 'Upload failed: ' . $e->getMessage();
+        }
+    }
+
+    // Delete (admin or authorized team member)
+    if ($action === 'delete_uploaded_file') {
+        $type = $_POST['file_type'] ?? '';
+        $fid  = (int)($_POST['file_id'] ?? 0);
+
+        try {
+            if (!in_array($type, ['assignment', 'submission'], true) || $fid <= 0) {
+                throw new Exception('Invalid delete request.');
+            }
+
+            if ($type === 'assignment') {
+                if (!$isAdmin) throw new Exception('Not authorized.');
+
+                $stmt = $pdo->prepare('SELECT * FROM assignment_files WHERE id = :id LIMIT 1');
+                $stmt->execute([':id' => $fid]);
+                $row = $stmt->fetch(PDO::FETCH_ASSOC);
+                if (!$row) throw new Exception('File not found.');
+
+                $path = __DIR__ . '/uploads/assignments/' . (int)$row['assignment_id'] . '/' . $row['stored_name'];
+                $del  = $pdo->prepare('DELETE FROM assignment_files WHERE id = :id');
+                $del->execute([':id' => $fid]);
+                if (is_file($path)) @unlink($path);
+
+                $message = 'File deleted.';
+
+            } else {
+                $stmt = $pdo->prepare('SELECT * FROM teamassignment_files WHERE id = :id LIMIT 1');
+                $stmt->execute([':id' => $fid]);
+                $row = $stmt->fetch(PDO::FETCH_ASSOC);
+                if (!$row) throw new Exception('File not found.');
+
+                $aid  = (int)$row['assignment_id'];
+                $pid  = (int)$row['person_id'];
+
+                // Delete permissions: admin OR the student themself (the owner of the submission)
+                if (!$isAdmin && $pid !== $loggedInUserId) {
+                    throw new Exception('Not authorized.');
+                }
+
+                $path = __DIR__ . '/uploads/submissions/' . $aid . '/' . $pid . '/' . $row['stored_name'];
+                $del  = $pdo->prepare('DELETE FROM teamassignment_files WHERE id = :id');
+                $del->execute([':id' => $fid]);
+                if (is_file($path)) @unlink($path);
+
+                $message = 'File deleted.';
+            }
+
+        } catch (Throwable $e) {
+            $message = 'Delete failed: ' . $e->getMessage();
+        }
+    }
+}
+
 
 // ---------- LOAD ASSIGNMENTS ----------
 $assignmentsStmt = $pdo->query('
@@ -278,6 +492,8 @@ $assignments = $assignmentsStmt->fetchAll();
 $selectedTeamsAssignmentId   = null;
 $selectedTeamsAssignmentName = '';
 $teamAssignmentsRows         = [];
+$assignmentFilesByAssignment = []; // [assignment_id] => rows
+$submissionFilesByPersonKey  = []; // ["aid:person_id"] => rows
 
 if (isset($_GET['show_teams'])) {
     $selectedTeamsAssignmentId = (int)$_GET['show_teams'];
@@ -304,6 +520,20 @@ if (isset($_GET['show_teams'])) {
             ');
             $stmt->execute([':aid' => $selectedTeamsAssignmentId]);
             $teamAssignmentsRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // Assignment files (visible to all logged-in users)
+            $stmt = $pdo->prepare('SELECT * FROM assignment_files WHERE assignment_id = :aid ORDER BY file_index ASC');
+            $stmt->execute([':aid' => $selectedTeamsAssignmentId]);
+            $assignmentFilesByAssignment[$selectedTeamsAssignmentId] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // Student submissions (ZIPs) for this assignment
+            $stmt = $pdo->prepare('SELECT * FROM teamassignment_files WHERE assignment_id = :aid ORDER BY person_id ASC, file_index ASC');
+            $stmt->execute([':aid' => $selectedTeamsAssignmentId]);
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $key = ((int)$r['assignment_id']) . ':' . ((int)$r['person_id']);
+                if (!isset($submissionFilesByPersonKey[$key])) $submissionFilesByPersonKey[$key] = [];
+                $submissionFilesByPersonKey[$key][] = $r;
+            }
         }
     }
 }
@@ -319,6 +549,13 @@ if ($isAdmin && isset($_GET['edit'])) {
         $stmt = $pdo->prepare('SELECT * FROM assignments WHERE id = :id');
         $stmt->execute([':id' => $editId]);
         $editingAssignment = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        // For edit screen: load existing instruction PDFs
+        if ($editingAssignment) {
+            $stmt = $pdo->prepare('SELECT * FROM assignment_files WHERE assignment_id = :aid ORDER BY file_index ASC');
+            $stmt->execute([':aid' => $editId]);
+            $assignmentFilesByAssignment[$editId] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        }
 
         if (!$editingAssignment) {
             $message = 'Assignment not found for editing.';

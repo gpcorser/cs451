@@ -27,7 +27,6 @@ function can_edit_review(array $review, int $userId, bool $isAdmin): bool {
     return false;
 }
 
-
 // ---------- LOAD ASSIGNMENTS (FOR DROPDOWN) ----------
 $assignments = $pdo->query('
     SELECT id, name
@@ -56,18 +55,86 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($studentId <= 0 || $assignmentId <= 0 || $comments === '' || $rating < 0 || $rating > 10) {
             $message = 'Please fill in all fields correctly. Rating must be 0–10.';
         } else {
-            $stmt = $pdo->prepare('
-                INSERT INTO reviews (reviewer_id, student_id, assignment_id, rating, comments)
-                VALUES (:reviewer_id, :student_id, :assignment_id, :rating, :comments)
-            ');
-            $stmt->execute([
-                ':reviewer_id'   => $loggedInUserId,
-                ':student_id'    => $studentId,
-                ':assignment_id' => $assignmentId,
-                ':rating'        => $rating,
-                ':comments'      => $comments,
-            ]);
-            $message = 'Review created.';
+
+            // ------------------------------------------------------------
+            // DUPLICATE GUARD / AUTO-SWITCH TO EDIT MODE (NO SCHEMA CHANGE)
+            // ------------------------------------------------------------
+            // If a review already exists for (reviewer, student, assignment),
+            // then update that existing review instead of inserting a duplicate.
+            // This preserves the user's submitted rating/comments and behaves
+            // like auto-switching into edit mode.
+            //
+            // IMPORTANT: admins are allowed to create duplicates if you ever need
+            // that for debugging; if you want admins blocked too, remove $isAdmin.
+            //
+            if (!$isAdmin) {
+                $dupStmt = $pdo->prepare('
+                    SELECT *
+                    FROM reviews
+                    WHERE reviewer_id   = :rid
+                      AND student_id    = :sid
+                      AND assignment_id = :aid
+                    ORDER BY id DESC
+                    LIMIT 1
+                ');
+                $dupStmt->execute([
+                    ':rid' => $loggedInUserId,
+                    ':sid' => $studentId,
+                    ':aid' => $assignmentId,
+                ]);
+                $existing = $dupStmt->fetch(PDO::FETCH_ASSOC);
+
+                if ($existing) {
+                    // If finalized, do not overwrite.
+                    if ($existing['date_finalized'] !== null) {
+                        $message = 'A review already exists for this peer and assignment, and it has been finalized. '
+                                 . 'You cannot create another review.';
+                    } else {
+                        // Update the existing review with the submitted content.
+                        $u = $pdo->prepare('
+                            UPDATE reviews
+                            SET rating = :rating,
+                                comments = :comments
+                            WHERE id = :id
+                        ');
+                        $u->execute([
+                            ':rating'   => $rating,
+                            ':comments' => $comments,
+                            ':id'       => (int)$existing['id'],
+                        ]);
+
+                        // Make the UI behave like "edit mode" by redirecting to edit that review.
+                        // This avoids double-submit issues and ensures the form values match DB.
+                        $qs = [];
+                        if ($assignmentFilter > 0) {
+                            $qs[] = 'assignment_id=' . $assignmentFilter;
+                        } else {
+                            // keep the assignment context stable after submit
+                            $qs[] = 'assignment_id=' . $assignmentId;
+                        }
+                        $qs[] = 'edit=' . (int)$existing['id'];
+
+                        header('Location: reviews.php?' . implode('&', $qs));
+                        exit;
+                    }
+                }
+            }
+
+            // Normal create path (no duplicate found, or admin)
+            if ($message === '') {
+                $stmt = $pdo->prepare('
+                    INSERT INTO reviews (reviewer_id, student_id, assignment_id, rating, comments)
+                    VALUES (:reviewer_id, :student_id, :assignment_id, :rating, :comments)
+                ');
+                $stmt->execute([
+                    ':reviewer_id'   => $loggedInUserId,
+                    ':student_id'    => $studentId,
+                    ':assignment_id' => $assignmentId,
+                    ':rating'        => $rating,
+                    ':comments'      => $comments,
+                ]);
+                $message = 'Review created.';
+            }
         }
 
     } elseif (in_array($action, ['update', 'delete', 'finalize'], true)) {
@@ -77,7 +144,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $stmt = $pdo->prepare('SELECT * FROM reviews WHERE id = :id');
             $stmt->execute([':id' => $id]);
-            $review = $stmt->fetch();
+            $review = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if (!$review) {
                 $message = 'Review not found.';
@@ -103,11 +170,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 WHERE id = :id
                             ');
                             $u->execute([
-                                ':student_id'   => $studentId,
-                                ':assignment_id'=> $assignmentId,
-                                ':rating'       => $rating,
-                                ':comments'     => $comments,
-                                ':id'           => $id,
+                                ':student_id'    => $studentId,
+                                ':assignment_id' => $assignmentId,
+                                ':rating'        => $rating,
+                                ':comments'      => $comments,
+                                ':id'            => $id,
                             ]);
                             $message = 'Review updated.';
                         }
@@ -151,7 +218,7 @@ if (isset($_GET['edit'])) {
     if ($editId > 0) {
         $stmt = $pdo->prepare('SELECT * FROM reviews WHERE id = :id');
         $stmt->execute([':id' => $editId]);
-        $editingReview = $stmt->fetch();
+        $editingReview = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$editingReview) {
             $message = 'Review not found for editing.';
@@ -171,7 +238,7 @@ if ($isAdmin) {
     // Admins see all (optionally filtered by assignment)
     if ($assignmentFilter > 0) {
         $sql = '
-            SELECT r.*, 
+            SELECT r.*,
                    a.name AS assignment_name,
                    rev.fname AS reviewer_fname, rev.lname AS reviewer_lname,
                    stu.fname AS student_fname, stu.lname AS student_lname
@@ -186,7 +253,7 @@ if ($isAdmin) {
         $stmt->execute([':aid' => $assignmentFilter]);
     } else {
         $sql = '
-            SELECT r.*, 
+            SELECT r.*,
                    a.name AS assignment_name,
                    rev.fname AS reviewer_fname, rev.lname AS reviewer_lname,
                    stu.fname AS student_fname, stu.lname AS student_lname
@@ -198,12 +265,12 @@ if ($isAdmin) {
         ';
         $stmt = $pdo->query($sql);
     }
-    $allReviews = $stmt->fetchAll();
+    $allReviews = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } else {
     // Non-admin: separate lists
     if ($assignmentFilter > 0) {
         $sqlMy = '
-            SELECT r.*, 
+            SELECT r.*,
                    a.name AS assignment_name,
                    rev.fname AS reviewer_fname, rev.lname AS reviewer_lname,
                    stu.fname AS student_fname, stu.lname AS student_lname
@@ -218,7 +285,7 @@ if ($isAdmin) {
         $stmtMy->execute([':uid' => $loggedInUserId, ':aid' => $assignmentFilter]);
 
         $sqlAbout = '
-            SELECT r.*, 
+            SELECT r.*,
                    a.name AS assignment_name,
                    rev.fname AS reviewer_fname, rev.lname AS reviewer_lname,
                    stu.fname AS student_fname, stu.lname AS student_lname
@@ -234,7 +301,7 @@ if ($isAdmin) {
 
     } else {
         $sqlMy = '
-            SELECT r.*, 
+            SELECT r.*,
                    a.name AS assignment_name,
                    rev.fname AS reviewer_fname, rev.lname AS reviewer_lname,
                    stu.fname AS student_fname, stu.lname AS student_lname
@@ -249,7 +316,7 @@ if ($isAdmin) {
         $stmtMy->execute([':uid' => $loggedInUserId]);
 
         $sqlAbout = '
-            SELECT r.*, 
+            SELECT r.*,
                    a.name AS assignment_name,
                    rev.fname AS reviewer_fname, rev.lname AS reviewer_lname,
                    stu.fname AS student_fname, stu.lname AS student_lname
@@ -264,8 +331,8 @@ if ($isAdmin) {
         $stmtAbout->execute([':uid' => $loggedInUserId]);
     }
 
-    $myReviews    = $stmtMy->fetchAll();
-    $reviewsAbout = $stmtAbout->fetchAll();
+    $myReviews    = $stmtMy->fetchAll(PDO::FETCH_ASSOC);
+    $reviewsAbout = $stmtAbout->fetchAll(PDO::FETCH_ASSOC);
 }
 
 // ---------- VALUES FOR FORM (CREATE OR EDIT) ----------

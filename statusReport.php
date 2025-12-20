@@ -54,6 +54,12 @@ require __DIR__ . '/status_common.php';
 
         </div>
 
+        <?php if ($message !== ''): ?>
+            <div class="alert alert-info alert-modern mb-3" role="alert">
+                <?php echo htmlspecialchars($message); ?>
+            </div>
+        <?php endif; ?>
+
         <?php if (empty($assignments)): ?>
             <p>No assignments have been created yet.</p>
         <?php else: ?>
@@ -73,7 +79,7 @@ require __DIR__ . '/status_common.php';
                                 <th>Avg</th>
                                 <th>Reviews Received</th>
                                 <th>Avg</th>
-                                <th>Reviews</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -96,7 +102,21 @@ require __DIR__ . '/status_common.php';
                             ?>
                             <!-- normal row -->
                             <tr>
-                                <td><?php echo htmlspecialchars($a['name']); ?></td>
+                                <td>
+                                    <div class="fw-semibold"><?php echo htmlspecialchars($a['name']); ?></div>
+                                    <?php if (!empty($assignmentPdfs[$aid])): ?>
+                                        <div class="small mt-1">
+                                            <span class="text-muted">Instructions:</span>
+                                            <?php foreach ($assignmentPdfs[$aid] as $pf): ?>
+                                                <a class="btn btn-outline-modern btn-sm ms-1" href="download.php?type=assignment&id=<?php echo (int)$pf['id']; ?>">
+                                                    PDF <?php echo (int)$pf['file_index']; ?>
+                                                </a>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    <?php else: ?>
+                                        <div class="small text-muted mt-1">Instructions: (none uploaded yet)</div>
+                                    <?php endif; ?>
+                                </td>
                                 <td><?php echo htmlspecialchars($a['date_assigned']); ?></td>
                                 <td><?php echo htmlspecialchars($a['date_due']); ?></td>
                                 <td><?php echo $gCnt; ?></td>
@@ -104,12 +124,65 @@ require __DIR__ . '/status_common.php';
                                 <td><?php echo $rCnt; ?></td>
                                 <td><?php echo $rAvgText; ?></td>
                                 <td>
-                                    <a
-                                        href="reviews.php?assignment_id=<?php echo $aid; ?>"
-                                        class="btn btn-outline-modern btn-sm"
-                                    >
-                                        Reviews
-                                    </a>
+                                    <div class="d-flex flex-column gap-1">
+                                        <a href="reviews.php?assignment_id=<?php echo $aid; ?>" class="btn btn-outline-modern btn-sm">Reviews</a>
+
+                                        <button class="btn btn-outline-modern btn-sm" type="button"
+                                                data-bs-toggle="collapse" data-bs-target="#upload-<?php echo $aid; ?>"
+                                                aria-expanded="false" aria-controls="upload-<?php echo $aid; ?>">
+                                            Upload ZIP
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+
+                            <!-- Upload / submission row -->
+                            <tr class="collapse" id="upload-<?php echo $aid; ?>">
+                                <td colspan="8">
+                                    <div class="row g-3">
+                                        <div class="col-md-6">
+                                            <div class="fw-semibold mb-1">My submission (ZIP)</div>
+                                            <?php $mine = $mySubmissionsByAssignment[$aid] ?? []; ?>
+                                            <?php if (empty($mine)): ?>
+                                                <div class="small text-muted mb-2">No ZIP uploaded yet.</div>
+                                            <?php else: ?>
+                                                <ul class="list-unstyled small mb-2">
+                                                    <?php foreach ($mine as $sf): ?>
+                                                        <li class="mb-1">
+                                                            <a class="btn btn-outline-modern btn-sm" href="download.php?type=submission&id=<?php echo (int)$sf['id']; ?>">
+                                                                Download ZIP <?php echo (int)$sf['file_index']; ?>
+                                                            </a>
+                                                            <span class="ms-2 text-muted"><?php echo htmlspecialchars($sf['original_name']); ?></span>
+                                                            <form method="post" action="statusReport.php" class="d-inline" onsubmit="return confirm('Delete this uploaded ZIP?');">
+                                                                <input type="hidden" name="action" value="delete_submission">
+                                                                <input type="hidden" name="file_id" value="<?php echo (int)$sf['id']; ?>">
+                                                                <button type="submit" class="btn btn-outline-modern btn-sm ms-2">Delete</button>
+                                                            </form>
+                                                        </li>
+                                                    <?php endforeach; ?>
+                                                </ul>
+                                            <?php endif; ?>
+
+                                            <form method="post" action="statusReport.php" enctype="multipart/form-data" class="d-flex flex-column gap-2">
+                                                <input type="hidden" name="action" value="upload_submission">
+                                                <input type="hidden" name="assignment_id" value="<?php echo $aid; ?>">
+                                                <input type="hidden" name="person_id" value="<?php echo $loggedInUserId; ?>">
+                                                <input class="form-control form-control-sm" type="file" name="submission_zip" accept=".zip,application/zip" required>
+                                                <div class="small text-muted">ZIP only. Max 2MB. Up to 3 uploads per assignment.</div>
+                                                <button type="submit" class="btn btn-modern btn-sm">Upload</button>
+                                            </form>
+                                        </div>
+
+                                        <div class="col-md-6">
+                                            <?php if ($teamLabel): ?>
+                                                <div class="fw-semibold mb-1">My team</div>
+                                                <div class="small text-muted"><?php echo htmlspecialchars($teamLabel); ?></div>
+                                                <div class="small text-muted mt-2">Peers will download your ZIP from the Reviews screen.</div>
+                                            <?php else: ?>
+                                                <div class="small text-danger">You are not assigned to a team for this assignment.</div>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
                                 </td>
                             </tr>
 
@@ -138,6 +211,9 @@ require __DIR__ . '/status_common.php';
                             $aid        = (int)$a['id'];
                             $headingId  = 'heading' . $aid;
                             $collapseId = 'collapse' . $aid;
+
+                            // NEW: load ZIP id map once per assignment (admin view)
+                            $zipIdMap = load_submission_zip_ids_for_assignment($pdo, $aid);
                         ?>
                         <div class="accordion-item">
                             <h2 class="accordion-header" id="<?php echo $headingId; ?>">
@@ -212,6 +288,9 @@ require __DIR__ . '/status_common.php';
                 $stmtDetailsReceived->execute([':aid' => $aid, ':sid' => $sid]);
                 $detailsReceived = $stmtDetailsReceived->fetchAll(PDO::FETCH_ASSOC);
             }
+
+            // NEW: compute ZIP buttons once per student (reused in both tables)
+            $zipButtonsHtml = render_zip_buttons($zipIdMap, $sid);
         ?>
         <!-- Summary row -->
         <tr>
@@ -250,7 +329,7 @@ require __DIR__ . '/status_common.php';
                                         <th>About</th>
                                         <th>Rating</th>
                                         <th>Comments</th>
-                                        <th>Last Edited</th>
+                                        <th>ZIP files</th>
                                         <th>Finalized</th>
                                     </tr>
                                 </thead>
@@ -260,7 +339,7 @@ require __DIR__ . '/status_common.php';
                                             <td><?php echo htmlspecialchars($d['student_lname'] . ', ' . $d['student_fname']); ?></td>
                                             <td><?php echo (int)$d['rating']; ?></td>
                                             <td><?php echo nl2br(htmlspecialchars($d['comments'])); ?></td>
-                                            <td><?php echo htmlspecialchars($d['date_last_edited']); ?></td>
+                                            <td><?php echo $zipButtonsHtml; ?></td>
                                             <td><?php echo htmlspecialchars($d['date_finalized'] ?? ''); ?></td>
                                         </tr>
                                     <?php endforeach; ?>
@@ -280,7 +359,7 @@ require __DIR__ . '/status_common.php';
                                         <th>From</th>
                                         <th>Rating</th>
                                         <th>Comments</th>
-                                        <th>Last Edited</th>
+                                        <th>ZIP files</th>
                                         <th>Finalized</th>
                                     </tr>
                                 </thead>
@@ -290,7 +369,7 @@ require __DIR__ . '/status_common.php';
                                             <td><?php echo htmlspecialchars($d['reviewer_lname'] . ', ' . $d['reviewer_fname']); ?></td>
                                             <td><?php echo (int)$d['rating']; ?></td>
                                             <td><?php echo nl2br(htmlspecialchars($d['comments'])); ?></td>
-                                            <td><?php echo htmlspecialchars($d['date_last_edited']); ?></td>
+                                            <td><?php echo $zipButtonsHtml; ?></td>
                                             <td><?php echo htmlspecialchars($d['date_finalized'] ?? ''); ?></td>
                                         </tr>
                                     <?php endforeach; ?>

@@ -2,6 +2,73 @@
 session_start();
 require __DIR__ . '/config.php';
 require __DIR__ . '/reviews_core.php';
+require __DIR__ . '/upload_helpers.php';
+
+/*
+ * ------------------------------------------------------------
+ * DUPLICATE REVIEW GUARD (no schema change)
+ * ------------------------------------------------------------
+ * Requirement:
+ * - A student should create only ONE review per (assignment, peer).
+ * - If they attempt to submit another "new" review (id=0),
+ *   show an error message and prevent persistence.
+ *
+ * Constraint:
+ * - CRUD is implemented inside reviews_core.php (already executed).
+ * - So we detect duplicates AFTER the core runs and rollback by deleting
+ *   the newest row if it created a duplicate.
+ *
+ * Notes:
+ * - This only triggers for non-admins, only for "create" (id=0).
+ * - Editing an existing review (id>0) is allowed.
+ */
+
+try {
+    if (
+        $_SERVER['REQUEST_METHOD'] === 'POST'
+        && !$isAdmin
+        && isset($_POST['student_id'], $_POST['assignment_id'])
+    ) {
+        $postedId         = (int)($_POST['id'] ?? 0);
+        $postedStudentId  = (int)($_POST['student_id'] ?? 0);
+        $postedAssignId   = (int)($_POST['assignment_id'] ?? 0);
+        $currentReviewer  = (int)($_SESSION['user_id'] ?? 0);
+
+        // Only enforce on "create new" attempts
+        if ($postedId === 0 && $postedStudentId > 0 && $postedAssignId > 0 && $currentReviewer > 0) {
+
+            // Count matching reviews (if > 1, the last submission created a duplicate)
+            $stmt = $pdo->prepare("
+                SELECT id
+                FROM reviews
+                WHERE assignment_id = :aid
+                  AND reviewer_id   = :rid
+                  AND student_id    = :sid
+                ORDER BY id DESC
+            ");
+            $stmt->execute([
+                ':aid' => $postedAssignId,
+                ':rid' => $currentReviewer,
+                ':sid' => $postedStudentId,
+            ]);
+            $ids = $stmt->fetchAll(PDO::FETCH_COLUMN, 0);
+
+            if (count($ids) > 1) {
+                // Delete the newest duplicate (highest id)
+                $deleteId = (int)$ids[0];
+                $del = $pdo->prepare("DELETE FROM reviews WHERE id = :id LIMIT 1");
+                $del->execute([':id' => $deleteId]);
+
+                // Override message from reviews_core.php
+                $message = 'Duplicate review blocked: you already submitted a review for this peer for this assignment. '
+                         . 'Please edit your existing review instead.';
+            }
+        }
+    }
+} catch (Throwable $e) {
+    // Fail closed in a user-friendly way; do not expose internals.
+    $message = 'A system error occurred while checking for duplicate reviews. Please try again.';
+}
 
 # Load assignment name
 
@@ -13,6 +80,53 @@ if ($assignmentFilter > 0) {
     $rowAF = $stmtAF->fetch(PDO::FETCH_ASSOC);
     if ($rowAF) {
         $assignmentFilterName = $rowAF['name'];
+    }
+}
+
+// -------------------------- FILES: INSTRUCTIONS + TEAM SUBMISSIONS --------------------------
+
+$instructionPdfs = [];
+$teamMembers = [];
+$submissionsByPerson = []; // [person_id] => list of submission rows
+
+if ($assignmentFilter > 0) {
+    // Instruction PDFs (teacher uploads)
+    $stmtPdf = $pdo->prepare('SELECT id, file_index, original_name, uploaded_at FROM assignment_files WHERE assignment_id = :aid ORDER BY file_index ASC');
+    $stmtPdf->execute([':aid' => $assignmentFilter]);
+    $instructionPdfs = $stmtPdf->fetchAll(PDO::FETCH_ASSOC);
+
+    // Team members for this assignment (includes self)
+    $stmtT = $pdo->prepare('SELECT team_number FROM teamassignments WHERE assignment_id = :aid AND person_id = :pid LIMIT 1');
+    $stmtT->execute([':aid' => $assignmentFilter, ':pid' => $loggedInUserId]);
+    $teamNumber = (int)($stmtT->fetchColumn() ?: 0);
+
+    if ($teamNumber > 0) {
+        $stmtM = $pdo->prepare('
+            SELECT p.id, p.fname, p.lname, p.email
+            FROM teamassignments ta
+            JOIN persons p ON p.id = ta.person_id
+            WHERE ta.assignment_id = :aid AND ta.team_number = :tn
+            ORDER BY p.lname ASC, p.fname ASC
+        ');
+        $stmtM->execute([':aid' => $assignmentFilter, ':tn' => $teamNumber]);
+        $teamMembers = $stmtM->fetchAll(PDO::FETCH_ASSOC);
+
+        if (!empty($teamMembers)) {
+            $ids = array_map(fn($r) => (int)$r['id'], $teamMembers);
+            $in  = implode(',', array_fill(0, count($ids), '?'));
+            $stmtS = $pdo->prepare(
+                'SELECT id, assignment_id, person_id, file_index, original_name, uploaded_at '
+              . 'FROM teamassignment_files '
+              . 'WHERE assignment_id = ? AND person_id IN (' . $in . ') '
+              . 'ORDER BY person_id ASC, file_index ASC'
+            );
+            $stmtS->execute(array_merge([$assignmentFilter], $ids));
+            foreach ($stmtS->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $pid = (int)$r['person_id'];
+                $submissionsByPerson[$pid] ??= [];
+                $submissionsByPerson[$pid][] = $r;
+            }
+        }
     }
 }
 
@@ -105,7 +219,7 @@ if (!$isAdmin && $assignmentFilter > 0) {
     <div class="app-shell">
         <div class="app-header-row">
             <div>
-                <h1 class="app-title-main">Ratings for: 
+                <h1 class="app-title-main">Ratings for:
                     <?php if ($assignmentFilter > 0): ?>
                         <strong><?php echo htmlspecialchars($assignmentFilterName); ?></strong>
                         (id=<?php echo (int)$assignmentFilter; ?>)
@@ -131,6 +245,75 @@ if (!$isAdmin && $assignmentFilter > 0) {
         <?php if ($message !== ''): ?>
             <div class="alert alert-info alert-modern mb-3" role="alert">
                 <?php echo htmlspecialchars($message); ?>
+            </div>
+        <?php endif; ?>
+
+        <?php if ($assignmentFilter > 0 && !$isAdmin): ?>
+            <div class="row g-3 mb-4">
+                <div class="col-lg-5">
+                    <div class="form-box-peach">
+                        <div class="fw-semibold mb-2">Assignment Instructions (PDF)</div>
+                        <?php if (empty($instructionPdfs)): ?>
+                            <div class="small text-muted">No PDFs uploaded yet.</div>
+                        <?php else: ?>
+                            <div class="d-flex flex-wrap gap-2">
+                                <?php foreach ($instructionPdfs as $pf): ?>
+                                    <a class="btn btn-outline-modern btn-sm"
+                                       href="download.php?type=assignment&id=<?php echo (int)$pf['id']; ?>">
+                                        PDF <?php echo (int)$pf['file_index']; ?>
+                                    </a>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                <div class="col-lg-7">
+                    <div class="form-box-peach">
+                        <div class="fw-semibold mb-2">Team Submissions (ZIP)</div>
+                        <?php if (empty($teamMembers)): ?>
+                            <div class="small text-muted">You are not assigned to a team for this assignment (or no team members found).</div>
+                        <?php else: ?>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-striped align-middle status-table mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Student</th>
+                                            <th>ZIP</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($teamMembers as $tm): ?>
+                                            <?php
+                                                $pid = (int)$tm['id'];
+                                                $files = $submissionsByPerson[$pid] ?? [];
+                                                $name = $tm['lname'] . ', ' . $tm['fname'];
+                                            ?>
+                                            <tr>
+                                                <td><?php echo htmlspecialchars($name); ?></td>
+                                                <td>
+                                                    <?php if (empty($files)): ?>
+                                                        <span class="small text-muted">(none)</span>
+                                                    <?php else: ?>
+                                                        <div class="d-flex flex-wrap gap-2">
+                                                            <?php foreach ($files as $sf): ?>
+                                                                <a class="btn btn-outline-modern btn-sm"
+                                                                   href="download.php?type=submission&id=<?php echo (int)$sf['id']; ?>">
+                                                                    ZIP <?php echo (int)$sf['file_index']; ?>
+                                                                </a>
+                                                            <?php endforeach; ?>
+                                                        </div>
+                                                    <?php endif; ?>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="small text-muted mt-2">Upload your ZIP from the Status Report screen (Actions → Upload ZIP).</div>
+                        <?php endif; ?>
+                    </div>
+                </div>
             </div>
         <?php endif; ?>
 
@@ -237,9 +420,6 @@ if (!$isAdmin && $assignmentFilter > 0) {
                 <?php endif; ?>
             </form>
         </fieldset>
-
-
-
 
         <?php if ($isAdmin): ?>
             <h2 class="status-section-title">
