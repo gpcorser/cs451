@@ -200,6 +200,32 @@ if ($isAdmin && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Optional: upload assignment instruction PDFs (admin only)
                 try {
                     if (!empty($_FILES['assignment_pdfs']) && !empty($_FILES['assignment_pdfs']['name'])) {
+
+error_log("UPLOAD DEBUG: _FILES=" . print_r($_FILES, true));
+
+$uploadBase = __DIR__ . '/uploads/assignments';
+error_log("UPLOAD DEBUG: uploadBase=$uploadBase exists=" . (is_dir($uploadBase) ? "yes" : "no") .
+          " writable=" . (is_writable($uploadBase) ? "yes" : "no"));
+
+if (!empty($_FILES['assignment_pdfs'])) {
+    $err = $_FILES['assignment_pdfs']['error'][0] ?? null;
+    $tmp = $_FILES['assignment_pdfs']['tmp_name'][0] ?? null;
+    $sz  = $_FILES['assignment_pdfs']['size'][0] ?? null;
+    $nm  = $_FILES['assignment_pdfs']['name'][0] ?? null;
+
+    error_log("UPLOAD DEBUG: first file name=$nm size=$sz tmp=$tmp err=$err");
+
+    if ($tmp && is_uploaded_file($tmp)) {
+        error_log("UPLOAD DEBUG: is_uploaded_file(tmp)=YES");
+    } else {
+        error_log("UPLOAD DEBUG: is_uploaded_file(tmp)=NO");
+    }
+}
+
+
+
+
+
                         $files = flatten_files_array($_FILES['assignment_pdfs'] ?? []);
                         $clean = validate_uploads($files, $MAX_UPLOAD_FILES, $MAX_UPLOAD_BYTES, ['pdf']);
 
@@ -366,18 +392,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $personId = (int)($_POST['person_id'] ?? 0);
 
         try {
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    echo "<pre>";
-    echo "POST action=" . htmlspecialchars($_POST['action'] ?? '') . "\n";
-    echo "_FILES keys:\n";
-    print_r(array_keys($_FILES));
-    echo "\nFull _FILES:\n";
-    print_r($_FILES);
-    echo "</pre>";
-    exit;
-}
-
 
             if ($aid <= 0 || $personId <= 0) throw new Exception('Invalid assignment/person.');
 

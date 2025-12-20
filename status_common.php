@@ -93,19 +93,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     try {
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    echo "<pre>";
-    echo "POST action=" . htmlspecialchars($_POST['action'] ?? '') . "\n";
-    echo "_FILES keys:\n";
-    print_r(array_keys($_FILES));
-    echo "\nFull _FILES:\n";
-    print_r($_FILES);
-    echo "</pre>";
-    exit;
-}
-
-
-
         if ($action === 'upload_submission') {
             $aid = (int)($_POST['assignment_id'] ?? 0);
             $pid = (int)($_POST['person_id'] ?? 0);
