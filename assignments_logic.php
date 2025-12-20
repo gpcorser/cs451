@@ -200,33 +200,7 @@ if ($isAdmin && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Optional: upload assignment instruction PDFs (admin only)
                 try {
                     if (!empty($_FILES['assignment_pdfs']) && !empty($_FILES['assignment_pdfs']['name'])) {
-
-error_log("UPLOAD DEBUG: _FILES=" . print_r($_FILES, true));
-
-$uploadBase = __DIR__ . '/uploads/assignments';
-error_log("UPLOAD DEBUG: uploadBase=$uploadBase exists=" . (is_dir($uploadBase) ? "yes" : "no") .
-          " writable=" . (is_writable($uploadBase) ? "yes" : "no"));
-
-if (!empty($_FILES['assignment_pdfs'])) {
-    $err = $_FILES['assignment_pdfs']['error'][0] ?? null;
-    $tmp = $_FILES['assignment_pdfs']['tmp_name'][0] ?? null;
-    $sz  = $_FILES['assignment_pdfs']['size'][0] ?? null;
-    $nm  = $_FILES['assignment_pdfs']['name'][0] ?? null;
-
-    error_log("UPLOAD DEBUG: first file name=$nm size=$sz tmp=$tmp err=$err");
-
-    if ($tmp && is_uploaded_file($tmp)) {
-        error_log("UPLOAD DEBUG: is_uploaded_file(tmp)=YES");
-    } else {
-        error_log("UPLOAD DEBUG: is_uploaded_file(tmp)=NO");
-    }
-}
-
-
-
-
-
-                        $files = flatten_files_array($_FILES['assignment_pdfs'] ?? []);
+                       $files = flatten_files_array($_FILES['assignment_pdfs'] ?? []);
                         $clean = validate_uploads($files, $MAX_UPLOAD_FILES, $MAX_UPLOAD_BYTES, ['pdf']);
 
                         $pdo->beginTransaction();
@@ -385,6 +359,26 @@ if (!empty($_FILES['assignment_pdfs'])) {
 // ---------- HANDLE FILE UPLOAD / DELETE (instruction PDFs + student ZIP submissions) ----------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
+
+    // TEMP DEBUG (remove after one test)
+if (isset($_POST['__debug_upload'])) {
+    echo "<pre style='background:#fff3cd;padding:12px;border:1px solid #ffeeba'>";
+    echo "DEBUG UPLOAD\n";
+    echo "action=" . htmlspecialchars($action) . "\n\n";
+    echo "_POST keys:\n"; print_r(array_keys($_POST));
+    echo "\n_FILES keys:\n"; print_r(array_keys($_FILES));
+    echo "\n_FILES:\n"; print_r($_FILES);
+
+    $base = __DIR__ . '/uploads';
+    echo "\nPath checks:\n";
+    echo "base=$base exists=" . (is_dir($base) ? "yes" : "no") . " writable=" . (is_writable($base) ? "yes" : "no") . "\n";
+    echo "assignments=" . $base . "/assignments exists=" . (is_dir($base.'/assignments') ? "yes" : "no") . " writable=" . (is_writable($base.'/assignments') ? "yes" : "no") . "\n";
+    echo "submissions=" . $base . "/submissions exists=" . (is_dir($base.'/submissions') ? "yes" : "no") . " writable=" . (is_writable($base.'/submissions') ? "yes" : "no") . "\n";
+
+    echo "</pre>";
+    exit;
+}
+
 
     // Student submissions (ZIP only): admin OR the student themself for that assignment
     if ($action === 'upload_submission_files') {
