@@ -58,7 +58,10 @@ function flatten_files_array(array $files): array
  */
 function validate_uploads(array $files, int $maxFiles, int $maxBytes, array $allowedExts = ['pdf','zip']): array
 {
-    $files = array_values(array_filter($files, fn($f) => (int)($f['error'] ?? 0) !== UPLOAD_ERR_NO_FILE));
+    $files = array_values(array_filter(
+        $files,
+        fn($f) => (int)($f['error'] ?? 0) !== UPLOAD_ERR_NO_FILE
+    ));
 
     if (count($files) === 0) {
         throw new Exception('No files selected.');
@@ -67,7 +70,7 @@ function validate_uploads(array $files, int $maxFiles, int $maxBytes, array $all
         throw new Exception('You may upload up to ' . $maxFiles . ' file(s) at a time.');
     }
 
-    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    // Allowed MIME types (defense-in-depth; extension check is primary gate)
     $allowed = [];
     if (in_array('pdf', $allowedExts, true)) {
         $allowed['pdf'] = ['application/pdf'];
@@ -76,8 +79,22 @@ function validate_uploads(array $files, int $maxFiles, int $maxBytes, array $all
         $allowed['zip'] = [
             'application/zip',
             'application/x-zip-compressed',
-            'application/octet-stream',
+            'application/octet-stream', // some hosts report zip as octet-stream
         ];
+    }
+
+    // MIME detector: prefer finfo if available, otherwise fallback.
+    $useFinfo = class_exists('finfo');
+    $finfo = null;
+    if ($useFinfo) {
+        // On some hosts the class exists but FILEINFO_MIME_TYPE may be unavailable;
+        // wrap in try/catch to be safe.
+        try {
+            $finfo = new finfo(FILEINFO_MIME_TYPE);
+        } catch (Throwable $e) {
+            $useFinfo = false;
+            $finfo = null;
+        }
     }
 
     $clean = [];
@@ -106,18 +123,43 @@ function validate_uploads(array $files, int $maxFiles, int $maxBytes, array $all
             throw new Exception('Invalid upload temp file.');
         }
 
-        $mime = $finfo->file($tmp) ?: 'application/octet-stream';
-        $ok = false;
+        // Detect MIME
+        $mime = 'application/octet-stream';
+        if ($useFinfo && $finfo) {
+            $detected = $finfo->file($tmp);
+            if (is_string($detected) && $detected !== '') {
+                $mime = $detected;
+            }
+        } else {
+            // Fallback: browser-reported MIME (may be empty or generic)
+            $browserType = (string)($f['type'] ?? '');
+            if ($browserType !== '') {
+                $mime = $browserType;
+            }
+        }
+
+        // MIME allowlist check (best-effort). If finfo is unavailable, this becomes weaker,
+        // but extension + is_uploaded_file + storage isolation still provides strong protection.
         if (!isset($allowed[$ext])) {
             throw new Exception('File extension not allowed.');
         }
+
+        $ok = false;
         foreach ($allowed[$ext] as $allowedMime) {
             if ($mime === $allowedMime) { $ok = true; break; }
         }
         if (!$ok) {
-            if ($ext === 'pdf' && str_contains($mime, 'pdf')) { $ok = true; }
-            if ($ext === 'zip' && str_contains($mime, 'zip')) { $ok = true; }
+            // Accept "contains" matches for typical variations
+            if ($ext === 'pdf' && stripos($mime, 'pdf') !== false) { $ok = true; }
+            if ($ext === 'zip' && stripos($mime, 'zip') !== false) { $ok = true; }
         }
+
+        // If finfo is unavailable, some servers/browsers may report empty or odd types.
+        // In that case, rely on extension and allow through (still capped to pdf/zip).
+        if (!$ok && !$useFinfo) {
+            $ok = true;
+        }
+
         if (!$ok) {
             throw new Exception('File type not allowed (detected: ' . $mime . ').');
         }

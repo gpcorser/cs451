@@ -48,8 +48,6 @@ require __DIR__ . '/assignments_logic.php';
 <div class="app-shell">
 
     <!-- Header -->
-     <input type="hidden" name="__debug_upload" value="1">
-
     <div class="app-header-row">
         <div>
             <h1 class="app-title-main">Assignments</h1>
