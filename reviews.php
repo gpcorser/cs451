@@ -185,10 +185,12 @@ $autoOpenModal = !empty($editingReview);
                     <?php else: ?>
                         <div class="d-flex flex-wrap gap-2">
                             <?php foreach ($instructionPdfs as $pf): ?>
-                                <a class="btn btn-outline-modern btn-sm"
-                                   href="download.php?type=assignment&id=<?php echo (int)$pf['id']; ?>">
-                                    PDF <?php echo (int)$pf['file_index']; ?>
-                                </a>
+<a class="btn btn-outline-modern btn-sm"
+   href="download.php?type=assignment&id=<?php echo (int)$pf['id']; ?>&view=inline"
+   target="_blank" rel="noopener">
+   PDF <?php echo (int)$pf['file_index']; ?>
+</a>
+
                             <?php endforeach; ?>
                         </div>
                     <?php endif; ?>

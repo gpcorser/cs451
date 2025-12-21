@@ -12,8 +12,11 @@ require __DIR__ . '/upload_helpers.php';
 $loggedInUserId = (int)$_SESSION['user_id'];
 $isAdmin        = !empty($_SESSION['is_admin']);
 
-$type = $_GET['type'] ?? '';
+$type   = $_GET['type'] ?? '';
 $fileId = (int)($_GET['id'] ?? 0);
+
+// New: optional inline viewing flag
+$viewInline = (($_GET['view'] ?? '') === 'inline');
 
 if (!in_array($type, ['assignment', 'submission'], true) || $fileId <= 0) {
     http_response_code(400);
@@ -84,13 +87,34 @@ if (!is_file($path)) {
 }
 
 $downloadName = safe_download_name((string)$row['original_name']);
-$mime = (string)($row['mime_type'] ?? 'application/octet-stream');
+$mime         = (string)($row['mime_type'] ?? 'application/octet-stream');
 
-header('Content-Description: File Transfer');
+// Only allow inline viewing for PDFs.
+// (This prevents someone from forcing inline on ZIPs or other types.)
+if ($mime !== 'application/pdf') {
+    $viewInline = false;
+}
+
+// Recommended: inline viewing primarily for assignment PDFs.
+// If you want to allow inline PDF viewing for submissions too, remove this condition.
+if ($type !== 'assignment') {
+    $viewInline = false;
+}
+
+// Headers
 header('Content-Type: ' . $mime);
-header('Content-Disposition: attachment; filename="' . $downloadName . '"');
-header('Content-Length: ' . filesize($path));
 header('X-Content-Type-Options: nosniff');
+
+// Optional but helpful for PDFs opened in-browser:
+header('Accept-Ranges: bytes');
+
+if ($viewInline) {
+    header('Content-Disposition: inline; filename="' . $downloadName . '"');
+} else {
+    header('Content-Disposition: attachment; filename="' . $downloadName . '"');
+}
+
+header('Content-Length: ' . filesize($path));
 
 readfile($path);
 exit;

@@ -108,9 +108,12 @@ require __DIR__ . '/status_common.php';
                                         <div class="small mt-1">
                                             <span class="text-muted">Instructions:</span>
                                             <?php foreach ($assignmentPdfs[$aid] as $pf): ?>
-                                                <a class="btn btn-outline-modern btn-sm ms-1" href="download.php?type=assignment&id=<?php echo (int)$pf['id']; ?>">
-                                                    PDF <?php echo (int)$pf['file_index']; ?>
-                                                </a>
+<a class="btn btn-outline-modern btn-sm"
+   href="download.php?type=assignment&id=<?php echo (int)$pf['id']; ?>&view=inline"
+   target="_blank" rel="noopener">
+   PDF <?php echo (int)$pf['file_index']; ?>
+</a>
+
                                             <?php endforeach; ?>
                                         </div>
                                     <?php else: ?>
