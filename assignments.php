@@ -158,7 +158,14 @@ require __DIR__ . '/assignments_logic.php';
 
                 <div class="mt-3">
                     <label class="form-label mb-1">Instruction PDFs (admin only, max 3, 2MB each)</label>
-                    <input type="file" name="assignment_pdfs[]" accept=".pdf" multiple class="form-control form-control-sm" style="max-width:520px;">
+
+                    <input type="file"
+                        name="assignment_pdfs[]"
+                        accept=".pdf"
+                        multiple
+                        class="form-control form-control-sm"
+                        style="max-width:520px;">
+
                     <div class="form-text small">Students will see these PDFs when they open the Teams view for the assignment.</div>
 
                     <?php if ($editingAssignment): ?>

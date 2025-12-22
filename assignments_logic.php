@@ -198,47 +198,67 @@ if ($isAdmin && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 $newId = (int)$pdo->lastInsertId();
 
                 // Optional: upload assignment instruction PDFs (admin only)
-                try {
-                    if (!empty($_FILES['assignment_pdfs']) && !empty($_FILES['assignment_pdfs']['name'])) {
-                       $files = flatten_files_array($_FILES['assignment_pdfs'] ?? []);
-                        $clean = validate_uploads($files, $MAX_UPLOAD_FILES, $MAX_UPLOAD_BYTES, ['pdf']);
+                // Optional: upload assignment instruction PDFs (admin only)
+try {
+    if (!empty($_FILES['assignment_pdfs']) && !empty($_FILES['assignment_pdfs']['name'])) {
 
-                        $pdo->beginTransaction();
-                        foreach ($clean as $f) {
-                            $idx = next_available_index($pdo, 'assignment_files', ['assignment_id' => $newId], 3);
-                            if ($idx === 0) {
-                                throw new Exception('This assignment already has 3 instruction PDFs. Delete one to upload another.');
-                            }
-                            $stored = random_storage_name($f['ext']);
-                            $dir = __DIR__ . '/uploads/assignments/' . $newId;
-                            ensure_dir($dir);
-                            $dest = $dir . '/' . $stored;
-                            if (!move_uploaded_file($f['tmp_name'], $dest)) {
-                                throw new Exception('Failed to move uploaded PDF.');
-                            }
-                            $ins = $pdo->prepare('
-                                INSERT INTO assignment_files
-                                    (assignment_id, file_index, original_name, stored_name, mime_type, file_size, uploaded_by)
-                                VALUES
-                                    (:aid, :idx, :orig, :stored, :mime, :size, :by)
-                            ');
-                            $ins->execute([
-                                ':aid'    => $newId,
-                                ':idx'    => $idx,
-                                ':orig'   => $f['orig_name'],
-                                ':stored' => $stored,
-                                ':mime'   => $f['mime'],
-                                ':size'   => $f['size'],
-                                ':by'     => $loggedInUserId,
-                            ]);
-                        }
-                        $pdo->commit();
-                    }
-                } catch (Throwable $e) {
-                    if ($pdo->inTransaction()) $pdo->rollBack();
-                    // Keep going (assignment exists); just add note to message
-                    $message .= ' (PDF upload warning: ' . $e->getMessage() . ')';
-                }
+        $files = flatten_files_array($_FILES['assignment_pdfs']);
+        $clean = validate_uploads($files, $MAX_UPLOAD_FILES, $MAX_UPLOAD_BYTES, ['pdf']);
+
+        // IMPORTANT: get starting index ONCE, then increment in PHP
+        $idxStmt = $pdo->prepare(
+            'SELECT COALESCE(MAX(file_index), 0) FROM assignment_files WHERE assignment_id = :aid'
+        );
+        $idxStmt->execute([':aid' => $newId]);
+        $nextIdx = (int)$idxStmt->fetchColumn();
+
+        $pdo->beginTransaction();
+
+        foreach ($clean as $f) {
+            $nextIdx++;
+
+            if ($nextIdx > 3) {
+                throw new Exception(
+                    'This assignment already has 3 instruction PDFs. Delete one to upload another.'
+                );
+            }
+
+            $stored = random_storage_name($f['ext']);
+            $dir    = __DIR__ . '/uploads/assignments/' . $newId;
+            ensure_dir($dir);
+
+            $dest = $dir . '/' . $stored;
+            if (!move_uploaded_file($f['tmp_name'], $dest)) {
+                throw new Exception('Failed to move uploaded PDF.');
+            }
+
+            $ins = $pdo->prepare('
+                INSERT INTO assignment_files
+                    (assignment_id, file_index, original_name, stored_name, mime_type, file_size, uploaded_by)
+                VALUES
+                    (:aid, :idx, :orig, :stored, :mime, :size, :by)
+            ');
+            $ins->execute([
+                ':aid'    => $newId,
+                ':idx'    => $nextIdx,
+                ':orig'   => $f['orig_name'],
+                ':stored' => $stored,
+                ':mime'   => $f['mime'],
+                ':size'   => $f['size'],
+                ':by'     => $loggedInUserId,
+            ]);
+        }
+
+        $pdo->commit();
+    }
+} catch (Throwable $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    // Keep going (assignment exists); just add note to message
+    $message .= ' (PDF upload warning: ' . $e->getMessage() . ')';
+}
+
 
                 // Always generate teams on create
                 try {
