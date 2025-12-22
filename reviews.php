@@ -4,14 +4,24 @@ require __DIR__ . '/config.php';
 require __DIR__ . '/reviews_core.php';
 require __DIR__ . '/upload_helpers.php';
 
-# Load assignment name
+# load assignment name, description
 $assignmentFilterName = '';
+$assignmentFilterDescription = '';
 if ($assignmentFilter > 0) {
-    $stmtAF = $pdo->prepare('SELECT name FROM assignments WHERE id = :id');
-    $stmtAF->execute([':id' => $assignmentFilter]);
-    $rowAF = $stmtAF->fetch(PDO::FETCH_ASSOC);
-    if ($rowAF) $assignmentFilterName = $rowAF['name'];
+    $stmt = $pdo->prepare('
+        SELECT name, description
+        FROM assignments
+        WHERE id = :id
+        LIMIT 1
+    ');
+    $stmt->execute([':id' => $assignmentFilter]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($row) {
+        $assignmentFilterName        = (string)($row['name'] ?? '');
+        $assignmentFilterDescription = (string)($row['description'] ?? '');
+    }
 }
+
 
 // -------------------------- FILES: INSTRUCTIONS + TEAM SUBMISSIONS --------------------------
 $instructionPdfs = [];
@@ -142,16 +152,12 @@ $autoOpenModal = !empty($editingReview);
     <!-- Custom CSS -->
     <link rel="stylesheet" href="cs451.css">
 </head>
+
 <body class="app-body">
 <div class="app-shell">
     <div class="app-header-row">
         <div>
-            <h1 class="app-title-main">Ratings for:
-                <?php if ($assignmentFilter > 0): ?>
-                    <strong><?php echo htmlspecialchars($assignmentFilterName); ?></strong>
-                    (id=<?php echo (int)$assignmentFilter; ?>)
-                <?php endif; ?>
-            </h1>
+            <h1 class="app-title-main">My Peer Evals</h1>
             <p class="app-subline">
                 You are logged in as <?php echo htmlspecialchars($userEmail); ?>
                 (id=<?php echo $loggedInUserId; ?>)
@@ -179,7 +185,11 @@ $autoOpenModal = !empty($editingReview);
         <div class="row g-3 mb-4">
             <div class="col-lg-5">
                 <div class="form-box-peach">
-                    <div class="fw-semibold mb-2">Assignment Instructions (PDF)</div>
+                    <?php if ($assignmentFilter > 0): ?>
+                        <strong>Assignment: <?php echo htmlspecialchars($assignmentFilterName); ?></strong>
+                    <?php endif; ?>
+        <div class="small"><?php echo nl2br(htmlspecialchars($assignmentFilterDescription)); ?></div>
+        <br />
                     <?php if (empty($instructionPdfs)): ?>
                         <div class="small text-muted">No PDFs uploaded yet.</div>
                     <?php else: ?>
