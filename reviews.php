@@ -270,7 +270,7 @@ $autoOpenModal = !empty($editingReview);
                     class="btn btn-modern btn-sm"
                     data-bs-toggle="modal"
                     data-bs-target="#reviewModal">
-                <?php echo $editingReview ? 'Edit Review' : 'Create Review'; ?>
+                <?php echo $editingReview ? 'Edit Peer Eval' : 'Create Peer Eval'; ?>
             </button>
 
             <?php if ($editingReview): ?>
@@ -280,6 +280,7 @@ $autoOpenModal = !empty($editingReview);
                 </a>
             <?php endif; ?>
         </div>
+        
     </div>
 
     <?php if ($isAdmin): ?>
@@ -353,7 +354,7 @@ $autoOpenModal = !empty($editingReview);
 
     <?php else: ?>
         <h2 class="status-section-title">
-            Reviews Written<?php echo $assignmentFilter > 0 ? ' (filtered)' : ''; ?>
+            Evals Written<?php echo $assignmentFilter > 0 ? ' (filtered)' : ''; ?>
         </h2>
 
         <p class="helper-text">
@@ -363,7 +364,7 @@ $autoOpenModal = !empty($editingReview);
         </p>
 
         <?php if (empty($myReviews)): ?>
-            <p>You have not written any reviews yet.</p>
+            <p>You have not written any evals yet.</p>
         <?php else: ?>
             <div class="table-responsive">
                 <table class="table table-sm table-striped align-middle status-table">
@@ -429,7 +430,7 @@ $autoOpenModal = !empty($editingReview);
         <?php endif; ?>
 
         <h2 class="status-section-title">
-            Reviews Received<?php echo $assignmentFilter > 0 ? ' (filtered)' : ''; ?>
+            Evals Received<?php echo $assignmentFilter > 0 ? ' (filtered)' : ''; ?>
         </h2>
 
         <p class="helper-text">
@@ -439,7 +440,7 @@ $autoOpenModal = !empty($editingReview);
         </p>
 
         <?php if (empty($reviewsAbout)): ?>
-            <p>No one has reviewed you yet.</p>
+            <p>No one has evaluated you yet.</p>
         <?php else: ?>
             <div class="table-responsive">
                 <table class="table table-sm table-striped align-middle status-table">
@@ -498,7 +499,7 @@ $autoOpenModal = !empty($editingReview);
 
                     <div class="row g-2 align-items-start">
                         <div class="col-md-5">
-                            <label class="form-label mb-1" for="student_id">Student being reviewed</label>
+                            <label class="form-label mb-1" for="student_id">Student being evaluated</label>
                             <select name="student_id" id="student_id" class="form-control form-control-sm" required>
                                 <option value="">-- Select student --</option>
                                 <?php foreach ($reviewablePersons as $p): ?>
