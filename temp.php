@@ -1,6 +1,7 @@
 <?php
 session_start();
-require __DIR__ . '/config.php';
+// require __DIR__ . '/config.php';
+require '../database/config.php';
 
 // If not logged in, send back to login
 if (!isset($_SESSION['user_id'])) {

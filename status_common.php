@@ -1,6 +1,7 @@
 <?php
 session_start();
-require __DIR__ . '/config.php';
+// require __DIR__ . '/config.php';
+require '../database/config.php';
 require __DIR__ . '/upload_helpers.php';
 
 if (!isset($_SESSION['user_id'])) {

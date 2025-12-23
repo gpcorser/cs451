@@ -1,6 +1,7 @@
 <?php
 session_start();
-require __DIR__ . '/config.php'; // brings in $pdo
+// require __DIR__ . '/config.php';
+require '../database/config.php';
 
 $message = '';
 

@@ -1,6 +1,7 @@
 <?php
 session_start();
-require __DIR__ . '/config.php';
+// require __DIR__ . '/config.php';
+require '../database/config.php';
 
 if (!isset($_SESSION['user_id'])) {
     header('Location: login.php');
@@ -83,8 +84,9 @@ require __DIR__ . '/assignments_logic.php';
                 <?php echo htmlspecialchars($formTitle); ?>
             </legend>
 
-            <form method="post" enctype="multipart/form-data"
-                  action="assignments.php<?php echo $editingAssignment ? '?edit=' . (int)$valId : ''; ?>">
+<form method="post" enctype="multipart/form-data"
+      action="assignments.php<?php echo ($formMode === 'update' ? '?edit=' . (int)$valId : ''); ?>">
+
 
                 <input type="hidden" name="action" value="<?php echo $formMode; ?>">
                 <input type="hidden" name="id" value="<?php echo (int)$valId; ?>">
@@ -143,10 +145,12 @@ require __DIR__ . '/assignments_logic.php';
 
                     <div class="col-md-1 d-flex align-items-end">
                         <div class="w-100">
-                            <button class="btn btn-modern btn-sm w-100 mb-1">
+                            <button type="submit" class="btn btn-modern btn-sm w-100 mb-1">
                                 <?php echo $editingAssignment ? 'Update' : 'Add'; ?>
                             </button>
-                            <?php if ($editingAssignment): ?>
+                            <?php // if ($editingAssignment): ?>
+                            <?php if ($formMode === 'update'): ?>
+
                                 <a href="assignments.php"
                                    class="btn btn-outline-modern btn-sm w-100">
                                     Cancel
@@ -168,7 +172,9 @@ require __DIR__ . '/assignments_logic.php';
 
                     <div class="form-text small">Students will see these PDFs when they open the Teams view for the assignment.</div>
 
-                    <?php if ($editingAssignment): ?>
+                    <?php // if ($editingAssignment): ?>
+                    <?php if ($formMode === 'update'): ?>
+
                         <?php $editFiles = $assignmentFilesByAssignment[(int)$valId] ?? []; ?>
                         <?php if (!empty($editFiles)): ?>
                             <div class="mt-2">
