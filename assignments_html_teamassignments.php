@@ -164,3 +164,50 @@
 
     <?php endif; ?>
 <?php endif; ?>
+
+<?php
+// ---------------------------------------------------------------------
+// Roster (alphabetical by last name) for Teams view
+// ---------------------------------------------------------------------
+if (!empty($selectedTeamsAssignmentId) && !empty($teamAssignmentsRows)) {
+
+    // Make an alphabetical copy (do NOT disturb existing team-group display)
+    $alphaRows = $teamAssignmentsRows;
+    usort($alphaRows, function ($a, $b) {
+        $al = mb_strtolower(trim((string)($a['lname'] ?? '')));
+        $bl = mb_strtolower(trim((string)($b['lname'] ?? '')));
+        if ($al !== $bl) return $al <=> $bl;
+
+        $af = mb_strtolower(trim((string)($a['fname'] ?? '')));
+        $bf = mb_strtolower(trim((string)($b['fname'] ?? '')));
+        if ($af !== $bf) return $af <=> $bf;
+
+        return ((int)($a['person_id'] ?? 0)) <=> ((int)($b['person_id'] ?? 0));
+    });
+    ?>
+
+    <hr class="my-4">
+
+    <h5 class="mb-2">Roster (Alphabetical)</h5>
+    <div class="table-responsive">
+        <table class="table table-sm table-striped align-middle">
+            <thead>
+                <tr>
+                    <th style="width: 90px;">Team #</th>
+                    <th>First Name</th>
+                    <th>Last Name</th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php foreach ($alphaRows as $r): ?>
+                <tr>
+                    <td><?php echo (int)($r['team_number'] ?? 0); ?></td>
+                    <td><?php echo htmlspecialchars((string)($r['fname'] ?? '')); ?></td>
+                    <td><?php echo htmlspecialchars((string)($r['lname'] ?? '')); ?></td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+
+<?php } ?>
