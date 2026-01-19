@@ -358,6 +358,27 @@ function render_pdf_emoji_links(array $zipIdMap, int $studentId): string
             // Existing ZIP buttons (reused in both nested tables)
             $zipButtonsHtml = render_zip_buttons($zipIdMap, $sid);
 
+            // Bracketed file list for this student (always show brackets)
+$fileNums = [];
+$studentFiles = $zipIdMap[$sid] ?? [];
+
+if (is_array($studentFiles) && !empty($studentFiles)) {
+    foreach ($studentFiles as $i => $row) {
+        if (is_array($row) && isset($row['file_index'])) {
+            $fileNums[] = (int)$row['file_index'];
+        } else {
+            $fileNums[] = $i + 1; // fallback
+        }
+    }
+}
+
+// Ensure stable ordering and remove duplicates if any
+$fileNums = array_values(array_unique($fileNums));
+sort($fileNums);
+
+$fileBracketText = '[' . implode(' ', $fileNums) . ']';
+
+
             // NEW: PDF emoji links (shown in summary row, Reviews Received column)
             $pdfEmojiHtml = render_pdf_emoji_links($zipIdMap, $sid);
 
@@ -383,9 +404,11 @@ function render_pdf_emoji_links(array $zipIdMap, int $studentId): string
             <td><?php echo htmlspecialchars($gAvgText); ?></td>
 
             <!-- Reviews Received: count + PDF emojis (only if PDF uploads exist) -->
-            <td class="cnt-cell">
-                <?php echo $rCnt; ?><?php echo $pdfEmojiHtml; ?>
-            </td>
+<td>
+    <?php echo (int)$rCnt; ?>
+    <span class="ms-2 text-muted"><?php echo htmlspecialchars($fileBracketText); ?></span>
+</td>
+
 
             <td><?php echo htmlspecialchars($rAvgText); ?></td>
 
