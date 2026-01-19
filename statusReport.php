@@ -1,5 +1,52 @@
 <?php
 require __DIR__ . '/status_common.php';
+
+/**
+ * Build clickable PDF "emoji" links for this student's submissions on this assignment.
+ * We reuse the existing $zipIdMap (loaded per-assignment) and filter to PDF files only.
+ *
+ * Expected $zipIdMap structure (as used by render_zip_buttons()):
+ *   $zipIdMap[$studentId] = [
+ *      ['id' => <file_id>, 'original_name' => '...', 'file_index' => 1, ...],
+ *      ...
+ *   ]
+ *
+ * If your load_submission_zip_ids_for_assignment() returns a different structure,
+ * adjust the $fid / $oname pulls below accordingly.
+ */
+function render_pdf_emoji_links(array $zipIdMap, int $studentId): string
+{
+    $items = $zipIdMap[$studentId] ?? [];
+    if (!is_array($items) || empty($items)) {
+        return '';
+    }
+
+    $out = '';
+    foreach ($items as $idx => $row) {
+        if (!is_array($row)) { continue; }
+
+        $fid   = isset($row['id']) ? (int)$row['id'] : 0;
+        $oname = isset($row['original_name']) ? (string)$row['original_name'] : '';
+
+        // Only show for PDFs
+        $isPdf = (strtolower(pathinfo($oname, PATHINFO_EXTENSION)) === 'pdf');
+        if ($fid <= 0 || !$isPdf) {
+            continue;
+        }
+
+        $label = $oname !== '' ? $oname : ('PDF ' . ($idx + 1));
+
+        // view=inline lets PDFs open in-browser if download.php supports it
+        $href = 'download.php?type=submission&id=' . $fid . '&view=inline';
+
+        $out .= ' <a class="pdf-emoji-link"'
+              . ' href="' . htmlspecialchars($href) . '"'
+              . ' target="_blank" rel="noopener noreferrer"'
+              . ' title="' . htmlspecialchars($label) . '">📄</a>';
+    }
+
+    return $out;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -27,6 +74,21 @@ require __DIR__ . '/status_common.php';
 
     <!-- Custom CSS -->
     <link rel="stylesheet" href="cs451.css">
+
+    <!-- Local tweaks for requested UI behavior -->
+    <style>
+        .cnt-bg-green { background: #d9f2d9 !important; }
+        .cnt-bg-yellow { background: #fff3cd !important; }
+        .cnt-bg-pink { background: #f8d7da !important; }
+        .cnt-cell {
+            text-align: center;
+            font-weight: 600;
+        }
+        .pdf-emoji-link {
+            text-decoration: none;
+            margin-left: 4px;
+        }
+    </style>
 </head>
 <body class="app-body">
     <div class="app-shell">
@@ -215,7 +277,8 @@ require __DIR__ . '/status_common.php';
                             $headingId  = 'heading' . $aid;
                             $collapseId = 'collapse' . $aid;
 
-                            // NEW: load ZIP id map once per assignment (admin view)
+                            // Load submission file id map once per assignment (admin view)
+                            // NOTE: Despite the name "zip", we also reuse this map for PDF filtering.
                             $zipIdMap = load_submission_zip_ids_for_assignment($pdo, $aid);
                         ?>
                         <div class="accordion-item">
@@ -267,13 +330,13 @@ require __DIR__ . '/status_common.php';
             $gStats = $statsGivenByAssignmentAndStudent[$aid][$sid]    ?? ['cnt' => 0, 'avg' => null];
             $rStats = $statsReceivedByAssignmentAndStudent[$aid][$sid] ?? ['cnt' => 0, 'avg' => null];
 
-            $gCnt = $gStats['cnt'];
-            $gAvg = $gStats['avg'];
-            $rCnt = $rStats['cnt'];
-            $rAvg = $rStats['avg'];
+            $gCnt = (int)($gStats['cnt'] ?? 0);
+            $gAvg = $gStats['avg'] ?? null;
+            $rCnt = (int)($rStats['cnt'] ?? 0);
+            $rAvg = $rStats['avg'] ?? null;
 
-            $gAvgText = ($gCnt > 0 && $gAvg !== null) ? number_format($gAvg, 1) : '-';
-            $rAvgText = ($rCnt > 0 && $rAvg !== null) ? number_format($rAvg, 1) : '-';
+            $gAvgText = ($gCnt > 0 && $gAvg !== null) ? number_format((float)$gAvg, 1) : '-';
+            $rAvgText = ($rCnt > 0 && $rAvg !== null) ? number_format((float)$rAvg, 1) : '-';
 
             $fullName = $stu['lname'] . ', ' . $stu['fname'];
 
@@ -292,19 +355,40 @@ require __DIR__ . '/status_common.php';
                 $detailsReceived = $stmtDetailsReceived->fetchAll(PDO::FETCH_ASSOC);
             }
 
-            // NEW: compute ZIP buttons once per student (reused in both tables)
+            // Existing ZIP buttons (reused in both nested tables)
             $zipButtonsHtml = render_zip_buttons($zipIdMap, $sid);
+
+            // NEW: PDF emoji links (shown in summary row, Reviews Received column)
+            $pdfEmojiHtml = render_pdf_emoji_links($zipIdMap, $sid);
+
+            // NEW: background class for Reviews Given count
+            if ($gCnt >= 2) {
+                $givenCntClass = 'cnt-bg-green';
+            } elseif ($gCnt === 1) {
+                $givenCntClass = 'cnt-bg-yellow';
+            } else {
+                $givenCntClass = 'cnt-bg-pink';
+            }
         ?>
         <!-- Summary row -->
         <tr>
             <td><?php echo htmlspecialchars($fullName . ' (' . $sid . ')'); ?></td>
-
-            
             <td><?php echo htmlspecialchars($stu['email']); ?></td>
-            <td><?php echo $gCnt; ?></td>
-            <td><?php echo $gAvgText; ?></td>
-            <td><?php echo $rCnt; ?></td>
-            <td><?php echo $rAvgText; ?></td>
+
+            <!-- Reviews Given: colored backgrounds -->
+            <td class="cnt-cell <?php echo $givenCntClass; ?>">
+                <?php echo $gCnt; ?>
+            </td>
+
+            <td><?php echo htmlspecialchars($gAvgText); ?></td>
+
+            <!-- Reviews Received: count + PDF emojis (only if PDF uploads exist) -->
+            <td class="cnt-cell">
+                <?php echo $rCnt; ?><?php echo $pdfEmojiHtml; ?>
+            </td>
+
+            <td><?php echo htmlspecialchars($rAvgText); ?></td>
+
             <td>
                 <button
                     type="button"
