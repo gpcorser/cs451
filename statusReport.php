@@ -297,7 +297,9 @@ require __DIR__ . '/status_common.php';
         ?>
         <!-- Summary row -->
         <tr>
-            <td><?php echo htmlspecialchars($fullName); ?></td>
+            <td><?php echo htmlspecialchars($fullName . ' (' . $sid . ')'); ?></td>
+
+            
             <td><?php echo htmlspecialchars($stu['email']); ?></td>
             <td><?php echo $gCnt; ?></td>
             <td><?php echo $gAvgText; ?></td>
