@@ -208,7 +208,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     id="email"
                     name="email"
                     value="<?php echo htmlspecialchars($email); ?>"
-                    required
+                    readonly
                 >
             </div>
 

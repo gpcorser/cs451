@@ -85,6 +85,14 @@ function assignments_action_update(PDO $pdo, string &$message): void
     if ($id <= 0) { $message = 'Invalid assignment id.'; return; }
     if ($name === '' || $dueDate === '' || $description === '') { $message = 'Please fill in all required fields.'; return; }
 
+    // IMPORTANT: teamassignments are scoped by assignment_id.
+    // If there are already teams for this assignment, we treat team composition as "locked"
+    // and we do NOT allow the admin to change team_size via the form (to avoid invalidating
+    // peer-review/group workflows).
+    //
+    // If there are NO teamassignment rows for this assignment (common after cloning, DB reset,
+    // or an earlier delete), we auto-generate teams on update as a convenience so the student
+    // side works immediately.
     $stmt = $pdo->prepare('SELECT COUNT(*) FROM teamassignments WHERE assignment_id = :aid');
     $stmt->execute([':aid'=>$id]);
     $hasTeams = ((int)$stmt->fetchColumn() > 0);
@@ -94,7 +102,10 @@ function assignments_action_update(PDO $pdo, string &$message): void
         $stmt->execute([':id'=>$id]);
         $teamSize = (int)$stmt->fetchColumn();
     } else {
-        if ($teamSize !== 3 && $teamSize !== 4) $teamSize = 3;
+        // When teams do not yet exist, default to team_size = 3.
+        // (If the roster size is not divisible by 3, generation logic may use a small number
+        // of 4-person teams to ensure every non-admin is assigned.)
+        $teamSize = 3;
     }
 
     $stmt = $pdo->prepare('UPDATE assignments SET name=:n, date_due=:d, description=:desc, team_size=:ts WHERE id=:id');
@@ -104,7 +115,22 @@ function assignments_action_update(PDO $pdo, string &$message): void
         assignments_handle_assignment_pdf_uploads($pdo, $id, $_FILES['assignment_pdfs']);
     }
 
-    $message = 'Assignment updated.';
+    // Auto-generate teamassignments on update when none exist for this assignment.
+    // This restores the historical behavior expected by the UI (e.g., student submission/peer
+    // review screens relying on team membership).
+    if (!$hasTeams) {
+        // Prefer 3-person teams. If the roster size is not divisible by 3, the generator
+        // will create a minimal number of 4-person teams (still only 3/4) so everyone is assigned.
+        if (function_exists('generateTeamsForAssignment')) {
+            $inserted = generateTeamsForAssignment($pdo, $id);
+            $message = 'Assignment updated. Teams generated (' . (int)$inserted . ' students assigned).';
+        } else {
+            // Defensive fallback: update succeeded but teams were not generated.
+            $message = 'Assignment updated. (Warning: team generator not available.)';
+        }
+    } else {
+        $message = 'Assignment updated.';
+    }
 }
 
 function assignments_action_delete(PDO $pdo, string &$message): void
