@@ -359,24 +359,38 @@ function render_pdf_emoji_links(array $zipIdMap, int $studentId): string
             $zipButtonsHtml = render_zip_buttons($zipIdMap, $sid);
 
             // Bracketed file list for this student (always show brackets)
+// Bracketed file list for this student (always show brackets)
 $fileNums = [];
 $studentFiles = $zipIdMap[$sid] ?? [];
 
+// $studentFiles is expected to be: [file_index => file_id, ...]
 if (is_array($studentFiles) && !empty($studentFiles)) {
-    foreach ($studentFiles as $i => $row) {
-        if (is_array($row) && isset($row['file_index'])) {
-            $fileNums[] = (int)$row['file_index'];
-        } else {
-            $fileNums[] = $i + 1; // fallback
+
+    // Indices are the keys
+    $indices = array_keys($studentFiles);
+
+    // Normalize legacy 0-based indexing (0..2) to 1..3
+    $minIdx = min($indices);
+    $maxIdx = max($indices);
+    $isLegacyZeroBased = ($minIdx === 0 && $maxIdx <= 2);
+
+    foreach ($indices as $idx) {
+        $n = (int)$idx;
+        if ($isLegacyZeroBased) {
+            $n = $n + 1;
+        }
+        if ($n >= 1 && $n <= 3) {
+            $fileNums[] = $n;
         }
     }
 }
 
-// Ensure stable ordering and remove duplicates if any
+// Stable ordering, de-dup, always show brackets
 $fileNums = array_values(array_unique($fileNums));
 sort($fileNums);
 
 $fileBracketText = '[' . implode(' ', $fileNums) . ']';
+
 
 
             // NEW: PDF emoji links (shown in summary row, Reviews Received column)
