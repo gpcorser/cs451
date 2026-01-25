@@ -44,6 +44,14 @@ function is_same_team(PDO $pdo, int $assignmentId, int $personA, int $personB): 
  * Load submission ZIP file IDs per (person_id, file_index) for ONE assignment.
  * Returns: $map[person_id][file_index] = file_id
  */
+/**
+ * Load submission ZIP file IDs per (person_id, file_index) for ONE assignment.
+ * Returns: $map[person_id][file_index] = file_id
+ *
+ * Compatibility:
+ * - If legacy data uses file_index 0..2, shift to 1..3 for UI rendering.
+ * - If modern data uses 1..3 (or higher), leave as-is.
+ */
 function load_submission_zip_ids_for_assignment(PDO $pdo, int $assignmentId): array
 {
     $stmt = $pdo->prepare('
@@ -54,14 +62,36 @@ function load_submission_zip_ids_for_assignment(PDO $pdo, int $assignmentId): ar
     ');
     $stmt->execute([':aid' => $assignmentId]);
 
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Detect legacy 0-based indexing for this assignment
+    $minIdx = null;
+    $maxIdx = null;
+    foreach ($rows as $r) {
+        $idx = (int)$r['file_index'];
+        $minIdx = ($minIdx === null) ? $idx : min($minIdx, $idx);
+        $maxIdx = ($maxIdx === null) ? $idx : max($maxIdx, $idx);
+    }
+    $isLegacyZeroBased = ($minIdx === 0 && $maxIdx !== null && $maxIdx <= 2);
+
     $map = [];
-    while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+    foreach ($rows as $r) {
         $pid = (int)$r['person_id'];
         $idx = (int)$r['file_index'];
-        $map[$pid][$idx] = (int)$r['id'];
+
+        if ($isLegacyZeroBased) {
+            $idx = $idx + 1; // shift 0..2 -> 1..3
+        }
+
+        // Only map slots 1..3 for the UI buttons
+        if ($idx >= 1 && $idx <= 3) {
+            $map[$pid][$idx] = (int)$r['id'];
+        }
     }
+
     return $map;
 }
+
 
 /**
  * Render compact "1 2 3" buttons for the ZIP submissions of a given student.
