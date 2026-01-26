@@ -23,12 +23,14 @@ function assignments_handle_post(PDO $pdo, int $loggedInUserId, bool $isAdmin, s
         switch ($action) {
             case 'create':
                 if (!$isAdmin) { http_response_code(403); $message = 'Not authorized.'; return; }
-                assignments_action_create($pdo, $message);
+                // assignments_action_create($pdo, $message);
+                assignments_action_create($pdo, $loggedInUserId, $message)
                 return;
 
             case 'update':
                 if (!$isAdmin) { http_response_code(403); $message = 'Not authorized.'; return; }
-                assignments_action_update($pdo, $message);
+                // assignments_action_update($pdo, $message);
+                assignments_action_create($pdo, $loggedInUserId, $message)
                 return;
 
             case 'delete':
@@ -50,7 +52,8 @@ function assignments_handle_post(PDO $pdo, int $loggedInUserId, bool $isAdmin, s
     }
 }
 
-function assignments_action_create(PDO $pdo, string &$message): void
+function assignments_action_create(PDO $pdo, int $loggedInUserId, string &$message): void
+//function assignments_action_create(PDO $pdo, string &$message): void
 {
     $name        = trim((string)($_POST['name'] ?? ''));
     $dueDate     = trim((string)($_POST['date_due'] ?? ''));
@@ -68,13 +71,15 @@ function assignments_action_create(PDO $pdo, string &$message): void
     $newId = (int)$pdo->lastInsertId();
 
     if (!empty($_FILES['assignment_pdfs']) && !empty($_FILES['assignment_pdfs']['name'])) {
-        assignments_handle_assignment_pdf_uploads($pdo, $newId, $_FILES['assignment_pdfs']);
+        //assignments_handle_assignment_pdf_uploads($pdo, $newId, $_FILES['assignment_pdfs']);
+        assignments_handle_assignment_pdf_uploads($pdo, $newId, $loggedInUserId, $_FILES['assignment_pdfs']);
     }
 
     $message = 'Assignment created.';
 }
 
-function assignments_action_update(PDO $pdo, string &$message): void
+function assignments_action_update(PDO $pdo, int $loggedInUserId, string &$message): void
+// function assignments_action_update(PDO $pdo, string &$message): void
 {
     $id          = (int)($_POST['id'] ?? 0);
     $name        = trim((string)($_POST['name'] ?? ''));
@@ -112,7 +117,9 @@ function assignments_action_update(PDO $pdo, string &$message): void
     $stmt->execute([':n'=>$name, ':d'=>$dueDate, ':desc'=>$description, ':ts'=>$teamSize, ':id'=>$id]);
 
     if (!empty($_FILES['assignment_pdfs']) && !empty($_FILES['assignment_pdfs']['name'])) {
-        assignments_handle_assignment_pdf_uploads($pdo, $id, $_FILES['assignment_pdfs']);
+        // assignments_handle_assignment_pdf_uploads($pdo, $id, $_FILES['assignment_pdfs']);
+        assignments_handle_assignment_pdf_uploads($pdo, $id, $loggedInUserId, $_FILES['assignment_pdfs']);
+
     }
 
     // Auto-generate teamassignments on update when none exist for this assignment.
@@ -252,7 +259,8 @@ function assignments_action_delete_uploaded_file(PDO $pdo, int $loggedInUserId, 
     $message = 'File deleted.';
 }
 
-function assignments_handle_assignment_pdf_uploads(PDO $pdo, int $assignmentId, array $filesBag): void
+function assignments_handle_assignment_pdf_uploads(PDO $pdo, int $assignmentId, int $uploadedBy, array $filesBag): void
+// function assignments_handle_assignment_pdf_uploads(PDO $pdo, int $assignmentId, array $filesBag): void
 {
     $files = assignments_flatten_files_array($filesBag);
     $clean = assignments_validate_uploads($files, 3, 10*1024*1024, ['pdf']);
@@ -279,13 +287,32 @@ function assignments_handle_assignment_pdf_uploads(PDO $pdo, int $assignmentId, 
             if (!move_uploaded_file($f['tmp_name'], $dest)) {
                 throw new RuntimeException('Failed to move uploaded PDF.');
             }
-
+/*
             $stmt = $pdo->prepare('INSERT INTO assignment_files (assignment_id, file_index, original_name, stored_name, mime_type, file_size)
                                    VALUES (:aid,:idx,:on,:sn,:mt,:sz)');
             $stmt->execute([
                 ':aid'=>$assignmentId, ':idx'=>$nextIndex,
                 ':on'=>$f['name'], ':sn'=>$stored, ':mt'=>$f['type'], ':sz'=>$f['size']
             ]);
+*/
+$uploadedBy = (int)($_SESSION['user_id'] ?? 0);
+$stmt = $pdo->prepare('
+    INSERT INTO assignment_files
+        (assignment_id, file_index, original_name, stored_name, mime_type, file_size, uploaded_by)
+    VALUES
+        (:aid, :idx, :on, :sn, :mt, :sz, :ub)
+');
+$stmt->execute([
+    ':aid' => $assignmentId,
+    ':idx' => $nextIndex,
+    ':on'  => $f['name'],
+    ':sn'  => $stored,
+    ':mt'  => $f['type'],
+    ':sz'  => $f['size'],
+    ':ub'  => $uploadedBy,
+]);
+
+
             $nextIndex++;
         }
         $pdo->commit();
